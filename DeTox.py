@@ -301,7 +301,7 @@ except FileNotFoundError:
 #================================ ORFs DETECTION ===================================================================================================================================================
 
 try:
-    subprocess.Popen(["ORFfinder","-in",transcFilesPath,"-s","1","-ml",args.ORFlength,"-out","CDS-detected.fa"]).communicate()
+    subprocess.Popen(["ORFfinder","-in",transcFilesPath,"-s","0","-ml",args.ORFlength,"-out","CDS-detected.fa"]).communicate()
 except FileNotFoundError:
     print("The ORFfinder program is not installed or was not found by the pipeline")
     sys.exit()
