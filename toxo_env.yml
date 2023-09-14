@@ -8,4 +8,10 @@ channels:
   - conda-forge
 dependencies:
   - snakemake
+  - salmon
+  - cd-hit
+  - trimmomatic
+  - trinity
+  - blast
+  - hmmer
   - python
