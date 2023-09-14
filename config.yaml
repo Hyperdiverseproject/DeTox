@@ -1,0 +1,2 @@
+transcriptome: /path/to/transcriptome.fasta
+memory: 12 # memory in GB, might change later
