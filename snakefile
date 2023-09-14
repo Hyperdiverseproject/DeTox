@@ -12,10 +12,11 @@ rule trim_reads:
         r1_unpaired = "trimmed_reads/unpaired." + config['R1'].split("/")[-1]
         r2 = "trimmed_reads/" + config['R2'].split("/")[-1]
         r2_unpaired = "trimmed_reads/unpaired." + config['R2'].split("/")[-1]
+    threads: config['threads']
     shell:
         """
         mkdir -p trimmed_reads
-        trimmomatic PE {input.r1} {input.r2} {output.r1} {output.r1_unpaired} {output.r2} {output.r2_unpaired} ILLUMINACLIP:{input.adapters}:2:40:15 LEADING:15 TRAILING:15 MINLEN:25 SLIDINGWINDOW:4:15"
+        trimmomatic PE -threads {threads} {input.r1} {input.r2} {output.r1} {output.r1_unpaired} {output.r2} {output.r2_unpaired} ILLUMINACLIP:{input.adapters}:2:40:15 LEADING:15 TRAILING:15 MINLEN:25 SLIDINGWINDOW:4:15"
         """
 
 rule assemble_transcriptome:
@@ -35,10 +36,9 @@ rule cdhit_clustering:
     params:
         threshold = config['clustering_threshold']
         memory = str(int(config['memory'])*1000)
-        threads = config['threads']
     threads: config['threads']
     shell:
         """
-        cd-hit-est -i {input.transcriptome} -o {output.clustered_transcriptome} -c {params.threshold} -M {params.memory} -T {params.threads} 
+        cd-hit-est -i {input.transcriptome} -o {output.clustered_transcriptome} -c {params.threshold} -M {params.memory} -T {threads} 
         """
 
