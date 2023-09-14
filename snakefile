@@ -4,14 +4,14 @@ rule trim_reads:
 #   todo: implement autodetection of compositional bias trimming?
 #   todo: do we provide the adapter list? switching to fastp would provide automatic adapter identification
     input:
-        r1 = config['R1']
-        r2 = config['R2']
-        adapters = config['adapters']
+        r1 = config['R1'],
+        r2 = config['R2'],
+        adapters = config['adapters'],
     output:
-        r1 = "trimmed_reads/" + config['R1'].split("/")[-1]
-        r1_unpaired = "trimmed_reads/unpaired." + config['R1'].split("/")[-1]
-        r2 = "trimmed_reads/" + config['R2'].split("/")[-1]
-        r2_unpaired = "trimmed_reads/unpaired." + config['R2'].split("/")[-1]
+        r1 = "trimmed_reads/" + config['R1'].split("/")[-1],
+        r1_unpaired = "trimmed_reads/unpaired." + config['R1'].split("/")[-1],
+        r2 = "trimmed_reads/" + config['R2'].split("/")[-1],
+        r2_unpaired = "trimmed_reads/unpaired." + config['R2'].split("/")[-1],
     threads: config['threads']
     shell:
         """
@@ -23,8 +23,8 @@ rule assemble_transcriptome:
 #   Description: Assembles a transcriptome if it is not provided. Uses Trinity 
 #   In this case sequencing reads MUST be provided in the config.
     input:
-        r1 = rules.trim_reads.output.r1
-        r2 = rules.trim_reads.output.r2
+        r1 = rules.trim_reads.output.r1,
+        r2 = rules.trim_reads.output.r2,
     output:
         assembly = "trinity_out_dir/Trinity.fasta"
     params:
@@ -41,11 +41,11 @@ rule cdhit_clustering:
     input: 
         transcriptome = config['transcriptome'] if transcriptome in config else rules.assemble_transcriptome.output.assembly
     output:
-        clustered_transcriptome = config['basename'] + ".clustered.fasta"
-        basename = config['basename'] + ".clustered"
+        clustered_transcriptome = config['basename'] + ".clustered.fasta",
+        basename = config['basename'] + ".clustered",
     params:
-        threshold = config['clustering_threshold']
-        memory = str(int(config['memory'])*1000)
+        threshold = config['clustering_threshold'],
+        memory = str(int(config['memory'])*1000),
     threads: config['threads']
     shell:
         """
@@ -67,8 +67,8 @@ rule build_contaminants_database:
 rule blast_on_contaminants:
 #   Description: performs the actual blast of the contigs against the contaminants database
     input:
-        blast_db = rules.build_contaminants_database.output.blast_db
-        contigs = rules.cdhit_clustering.output.clustered_transcriptome
+        blast_db = rules.build_contaminants_database.output.blast_db,
+        contigs = rules.cdhit_clustering.output.clustered_transcriptome,
     output:
         blast_result = config['basename'] + ".blastsnuc.out"
     params:
@@ -82,8 +82,8 @@ rule blast_on_contaminants:
 rule filter_contaminants:
 #   Description: performs the actual filtering
     input: 
-        blast_result = rules.blast_on_contaminants.output.blast_result
-        contigs = rules.cdhit_clustering.output.clustered_transcriptome
+        blast_result = rules.blast_on_contaminants.output.blast_result,
+        contigs = rules.cdhit_clustering.output.clustered_transcriptome,
     output:
         filtered_contigs = config['basename'] + ".filtered.fasta"
     run:
