@@ -1,3 +1,7 @@
+configfile: "config.yaml"
+
+
+
 rule trim_reads:
 #   Description: trims the provided raw reads
 #   todo: switch trimmomatic for fastp?
@@ -28,7 +32,7 @@ rule assemble_transcriptome:
     output:
         assembly = "trinity_out_dir/Trinity.fasta"
     params:
-        memory = config['memory'] + "G"
+        memory = str(config['memory']) + "G"
     threads: config['threads']
     shell:
         """
@@ -39,7 +43,7 @@ rule assemble_transcriptome:
 rule cdhit_clustering:
 #   Description: Clusters transcriptome sequences using cd-hit-est.
     input: 
-        transcriptome = config['transcriptome'] if transcriptome in config else rules.assemble_transcriptome.output.assembly
+        transcriptome = config['transcriptome'] if 'transcriptome' in config else rules.assemble_transcriptome.output.assembly
     output:
         clustered_transcriptome = config['basename'] + ".clustered.fasta",
         basename = config['basename'] + ".clustered",
@@ -101,3 +105,8 @@ rule filter_contaminants:
             for rec in recordIter:
                 if rec.id not in listIDConta:
                     SeqIO.write(rec, handle, "fasta")
+
+
+rule all:
+    input:
+        rules.filter_contaminants.output.filtered_contigs
