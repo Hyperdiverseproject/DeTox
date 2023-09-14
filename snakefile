@@ -79,3 +79,25 @@ rule blast_on_contaminants:
         blastn -db {input.blast_db} -query {input.contigs} -out {output.blast_result} -outfmt 6 -evalue {params.evalue} -max_target_seqs 1 -numthreads {threads}
         """
 
+rule filter_contaminants:
+#   Description: performs the actual filtering
+    input: 
+        blast_result = rules.blast_on_contaminants.output.blast_result
+        contigs = rules.cdhit_clustering.output.clustered_transcriptome
+    output:
+        filtered_contigs = config['basename'] + ".filtered.fasta"
+    run:
+        from Bio import SeqIO
+        records = []
+        infile = open(input.blast_result, 'r')
+        for line in infile:
+            line = line.rstrip()
+            if line[0] != '#':
+                blast = line.split()                                        
+                records.append(blast[0]) # we recover the ID of the significan hits
+        infile.close()
+        recordIter = SeqIO.parse(open(input.contigs), "fasta")
+        with open(output.filtered_contigs, "w") as handle:
+            for rec in recordIter:
+                if rec.id not in listIDConta:
+                    SeqIO.write(rec, handle, "fasta")
