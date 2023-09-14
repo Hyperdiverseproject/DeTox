@@ -4,7 +4,6 @@
 # to update the env: conda env update --name DeToX --file toxo_env.yml --prune
 name: DeToX
 channels:
-  - defaults
   - bioconda 
   - conda-forge
 dependencies:
