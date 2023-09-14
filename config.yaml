@@ -1,4 +1,6 @@
 transcriptome: /path/to/transcriptome.fasta
 memory: 12 # memory in GB, might change later
+threads: 8 # logic threads, not physical cores, for clarity
 R1: /path/to/R1.fastq.gz
 R2: /path/to/R2.fastq.gz
+adapters: /path/to/adapters.fasta
