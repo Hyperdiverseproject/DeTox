@@ -20,11 +20,20 @@ rule trim_reads:
         """
 
 rule assemble_transcriptome:
-#   Description: Assembles a transcriptome if it is not provided. 
+#   Description: Assembles a transcriptome if it is not provided. Uses Trinity 
 #   In this case sequencing reads MUST be provided in the config.
     input:
         r1 = rules.trim_reads.output.r1
         r2 = rules.trim_reads.output.r2
+    output:
+        assembly = "trinity_out_dir/Trinity.fasta"
+    params:
+        memory = config['memory'] + "G"
+    threads: config['threads']
+    shell:
+        """
+        Trinity --seqType fq --left {rules.trim_reads.output.r1} --right {rules.trim_reads.output.r2} --CPU {threads} --max_memory {params.memory} --KMER_SIZE 31
+        """
     
 
 rule cdhit_clustering:
