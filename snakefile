@@ -39,15 +39,16 @@ rule assemble_transcriptome:
 rule cdhit_clustering:
 #   Description: Clusters transcriptome sequences using cd-hit-est.
     input: 
-        transcriptome = config['transcriptome']
+        transcriptome = config['transcriptome'] if transcriptome in config else rules.assemble_transcriptome.output.assembly
     output:
-        clustered_transcriptome = "clustered.{input.transcriptome}"
+        clustered_transcriptome = config['basename'] + ".clustered.fasta"
+        basename = config['basename'] + ".clustered"
     params:
         threshold = config['clustering_threshold']
         memory = str(int(config['memory'])*1000)
     threads: config['threads']
     shell:
         """
-        cd-hit-est -i {input.transcriptome} -o {output.clustered_transcriptome} -c {params.threshold} -M {params.memory} -T {threads} 
+        cd-hit-est -i {input.transcriptome} -o {output.basename} -c {params.threshold} -M {params.memory} -T {threads} 
         """
 
