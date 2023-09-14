@@ -6,3 +6,4 @@ R1: /path/to/R1.fastq.gz
 R2: /path/to/R2.fastq.gz
 adapters: /path/to/adapters.fasta
 contaminants: /path/to/contaminats.fasta 
+contamination_evalue: "1e-5"

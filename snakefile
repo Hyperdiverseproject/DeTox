@@ -52,3 +52,30 @@ rule cdhit_clustering:
         cd-hit-est -i {input.transcriptome} -o {output.basename} -c {params.threshold} -M {params.memory} -T {threads} 
         """
 
+rule build_contaminants_database:
+#   Description: builds blast database for the removal of contaminants   
+#   todo: make this optional like in the original code
+    input:
+        fasta_db = config['contaminants']
+    output:
+        blast_db = config['contaminants'] + ".nin"
+    shell:
+        """
+        makeblastdb -dbtype nucl -in {input.fasta_db}
+        """
+
+rule blast_on_contaminants:
+#   Description: performs the actual blast of the contigs against the contaminants database
+    input:
+        blast_db = rules.build_contaminants_database.output.blast_db
+        contigs = rules.cdhit_clustering.output.clustered_transcriptome
+    output:
+        blast_result = config['basename'] + ".blastsnuc.out"
+    params:
+        evalue = config['contamination_evalue']
+    threads: config['threads']
+    shell:
+        """
+        blastn -db {input.blast_db} -query {input.contigs} -out {output.blast_result} -outfmt 6 -evalue {params.evalue} -max_target_seqs 1 -numthreads {threads}
+        """
+
