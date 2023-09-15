@@ -138,6 +138,11 @@ rule cluster_peptides:
         cd-hit -i {input.aa_sequences} -o {params.basename} -c {params.threshold} -M {params.memory} -T {threads} 
         """    
 
+rule split_fasta:
+    input:
+        rules.cluster_peptides.output.filtered_aa_sequences
+    # todo continue here
+
 #todo: rule run_signalp: # requires some testing. 
 #todo: test with stripped sequences. This means that all sequences are preprocessed to be cut to a fixed length that would contain a signal peptide (like 50 or so). this might save memory and improve time. Moreover, we could try deduplicating these cut sequences and rereplicate afterwards to avoid predicting the same signal over and over. 
 #   Description: runs signalp on the detected orfs
