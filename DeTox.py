@@ -301,10 +301,22 @@ except FileNotFoundError:
     print("The ORFfinder program is not installed or was not found by the pipeline")
     sys.exit()
 
+
+#================================ Clustering proteins of ORFS detection ===================================================================================================================================================
+
+try:
+    CPU = str(mp.cpu_count())
+    memory = args.memory+"000"
+    subprocess.Popen(["cd-hit","-i","CDS-detected.fa","-o","CDS-Clustered.fasta","-c","1","-M",memory,"-T",CPU]).communicate()
+    transcFilesPath = (name+"Clustered.fasta")
+except FileNotFoundError:
+    print("cd-hit is not installed or was not found by the pipeline")
+    sys.exit()
+
 #================================ PREPARATION AND RUN OF SIGNALP ==================================================================================================================================
 
 # Spécifiez le chemin d'accès à votre fichier fasta volumineux.
-fasta_file = "./CDS-detected.fa"
+fasta_file = "./CDS-Clustered.fasta"
 dirTest = f"./split_fasta_{name}"
 seqs_per_file = 50000
 
@@ -422,7 +434,7 @@ def checkSignalpResultAndParse(signalPFilePath,ORFfilePath,Dvalue,outORFsNameFil
     outORFsfasta.close()
     outSSfasta.close()
 
-checkSignalpResultAndParse((name+".signalp"),"CDS-detected.fa",args.SignalPeptideProbability,(name+"_sigORFs.fasta"),(name+"_SSeqs.fasta"))
+checkSignalpResultAndParse((name+".signalp"),"CDS-Clustered.fasta",args.SignalPeptideProbability,(name+"_sigORFs.fasta"),(name+"_SSeqs.fasta"))
 
 
 
@@ -455,7 +467,7 @@ except FileNotFoundError:
 
 #================================ Search of toxines in ORF without Signal peptide =====================================================================================================================================================================================
 
-fasta_ORFs = "CDS-detected.fa"
+fasta_ORFs = "CDS-Clustered.fasta"
 fasta_ORFs_withSP = name+'_finalORFs.fasta'
 fasta_ORFs_withoutSP = name+"_SequenceWithoutSP.fa"
 ORFS_withoutSP_with_blastHit = name+"_ORFS_withoutSP_with_blastHit.out"
@@ -616,7 +628,7 @@ if args.Salmon and args.R1ReadsFile :
     subprocess.Popen(['salmon','index','-t',transcFilesPath,'-i',('index_'+name)]).communicate()
     subprocess.Popen(['salmon','quant','-i',('index_'+name),'-l','A','-1',args.R1ReadsFile,'-2',args.R2ReadsFile,'-o','output_salmon']).communicate()
     quantiSalmon = pandas.read_csv("./output_salmon/quant.sf",delimiter="\t")
-    secreted = pandas.merge(secreted,quantiSalmon[["Name","TPM"]],left_on="ID_transcrit",right_on="target_id")
+    secreted = pandas.merge(secreted,quantiSalmon[["Name","TPM"]],left_on="ID_transcrit",right_on="Name")
     secreted = secreted.drop(["Name","ID_transcrit_y","ID_transcrit_x"],axis=1, errors='ignore')
     secreted.rename(columns={'tpm': 'TPM_salmon'}, inplace=True)
     secreted.to_csv(name+'_secreted_ORFs.alldata', index=False,sep='\t')
