@@ -1,4 +1,4 @@
-transcriptome: test/transcriptome.fasta
+#transcriptome: test/transcriptome.fasta
 basename: basename
 memory: 12 # memory in GB, might change later
 threads: 8 # logic threads, not physical cores, for clarity
