@@ -110,7 +110,7 @@ rule detect_orfs:
 #   Description: finds complete orfs within the input nucleotide sequences. 
 #   i'm testing this with orfipy instead of orffinder to leverage multithreading
     input:
-        nucleotide_sequences = rules.filter_contaminants.out.filtered_contigs
+        nucleotide_sequences = rules.filter_contaminants.output.filtered_contigs
     output:
         aa_sequences = config['basename'] + ".faa"
     params:
@@ -138,7 +138,7 @@ rule cluster_peptides:
         cd-hit -i {input.aa_sequences} -o {params.basename} -c {params.threshold} -M {params.memory} -T {threads} 
         """    
 
-rule run_signalp:
+#todo: rule run_signalp:
 #   Description: runs signalp on the detected orfs
 
 
