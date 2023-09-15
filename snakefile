@@ -106,9 +106,25 @@ rule filter_contaminants:
                 if rec.id not in listIDConta:
                     SeqIO.write(rec, handle, "fasta")
 
+rule detect_orfs:
+#   Description: finds complete orfs within the input nucleotide sequences. 
+#   i'm testing this with orfipy instead of orffinder to leverage multithreading
+    input:
+        nucleotide_sequences = rules.filter_contaminants.out.filtered_contigs
+    output:
+        aa_sequences = config['basename'] + ".faa"
+    params:
+        minlen = "33" if "minlen" not in config else config['minlen']
+        maxlen = "3000000000" if "maxlen" not in config else config['maxlen']
+    threads: config['threads']
+    shell:
+        """
+        orfipy --procs {threads} --start ATG --pep {output.aa_sequences} --min {params.minlen} --max {params.maxlen} {input.nucleotide_sequences}
+        """
 
+    
 
 
 rule all:
     input:
-        rules.filter_contaminants.output.filtered_contigs
+        rules.detect_orfs.output.aa_sequences
