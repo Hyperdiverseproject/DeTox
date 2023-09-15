@@ -114,7 +114,7 @@ rule detect_orfs:
     output:
         aa_sequences = config['basename'] + ".faa"
     params:
-        minlen = "33" if "minlen" not in config else config['minlen']
+        minlen = "33" if "minlen" not in config else config['minlen'],
         maxlen = "3000000000" if "maxlen" not in config else config['maxlen']
     threads: config['threads']
     shell:
@@ -122,7 +122,24 @@ rule detect_orfs:
         orfipy --procs {threads} --start ATG --pep {output.aa_sequences} --min {params.minlen} --max {params.maxlen} {input.nucleotide_sequences}
         """
 
-    
+rule cluster_peptides:
+#   Description: runs cd-hit on predicted peptide to remove excess redundancy
+    input:
+        aa_sequences = rules.detect_orfs.output.aa_sequences
+    output:
+        filtered_aa_sequences = config['basename'] + ".filtered.faa" #todo might want to change the basename to a param also in the other cd-hit rule if we decide on keeping it
+    params:
+        threshold = config['clustering_threshold'], #todo : we might want to use separate thresholds if we're going to run cd-hit on transcripts and peptides
+        memory = str(int(config['memory'])*1000),
+        basename = config['basename'] + ".filtered"
+    threads: config['threads']
+    shell:
+        """
+        cd-hit -i {input.aa_sequences} -o {params.basename} -c {params.threshold} -M {params.memory} -T {threads} 
+        """    
+
+rule run_signalp:
+#   Description: runs signalp on the detected orfs
 
 
 rule all:

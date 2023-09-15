@@ -8,3 +8,4 @@ adapters: test/adapters.fasta
 contaminants: test/contaminants.fasta 
 contamination_evalue: "1e-5"
 clustering_threshold: "0.9"
+signalp_path: ~/signalp-5.0b/bin/
