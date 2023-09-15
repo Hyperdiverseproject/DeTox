@@ -107,6 +107,8 @@ rule filter_contaminants:
                     SeqIO.write(rec, handle, "fasta")
 
 
+
+
 rule all:
     input:
         rules.filter_contaminants.output.filtered_contigs
