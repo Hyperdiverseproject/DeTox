@@ -47,7 +47,7 @@ parser = ArgumentParser(prog='PROG',
                         
                     Other filters:
                     
-                        - kallisto (opt)
+                        - Salmon (opt)
                         - RSEM  (opt) ( long to run )
                         - WoLF PSORT  (opt)
             
@@ -76,14 +76,9 @@ parser.add_argument("-t",
                       help="Path of Transcriptome, file name format: specie.fasta",
                       dest="TranscFilesPath")
 
-parser.add_argument("-RSEM",
-                      help="Adds RSEM quantification",
-                      dest="RSEM",
-                      action='store_true')
-
-parser.add_argument("-K",
-                      help="Adds Kallisto quantification",
-                      dest="kallisto",
+parser.add_argument("-S",
+                      help="Adds Salmon quantification",
+                      dest="Salmon",
                       action='store_true')
 
 parser.add_argument("-r1",
@@ -168,8 +163,8 @@ args = parser.parse_args()
 
 #================================ Check parameters ===================================================================================================================================================
 
-if (args.RSEM or args.kallisto) and (args.R1ReadsFile is None or args.R2ReadsFile is None):
-    parser.error("-RSEM or -K requires -r1 and -r2")
+if (args.Salmon) and (args.R1ReadsFile is None or args.R2ReadsFile is None):
+    parser.error("-S requires -r1 and -r2")
     
 # The assembly needs to specify the memory
 if args.Assembly and args.memory is None:
@@ -614,34 +609,17 @@ if args.cysPattern :
     secreted["CysPattern"] = secreted["MatureSeq"].apply(get_cys_pattern)
     secreted.to_csv(name+'_secreted_ORFs.alldata', index=False,sep='\t')
 
-#================================ TPM Quantification Kallisto ================================================================================================================================================
-if args.kallisto and args.R1ReadsFile :
+#================================ TPM Quantification Salmon ================================================================================================================================================
+if args.Salmon and args.R1ReadsFile :
     secreted = pandas.read_csv(name+'_secreted_ORFs.alldata',delimiter="\t")
     secreted["ID_transcrit"]=secreted.ID.str.split("|",expand=True)[1].str.split(pat=":",n=1,expand=True)[0].str.split(pat="_",n=1,expand=True)[1]
-
-    subprocess.Popen(['kallisto','index','-i','indexKallisto',transcFilesPath,'--make-unique']).communicate()
-    subprocess.Popen(['kallisto','quant','-i','indexKallisto','-o','./abundance',args.R1ReadsFile,args.R2ReadsFile]).communicate()
-
-    quantiKallisto = pandas.read_csv("./abundance/abundance.tsv",delimiter="\t")
-    secreted = pandas.merge(secreted,quantiKallisto[["target_id","tpm"]],left_on="ID_transcrit",right_on="target_id")
-    secreted = secreted.drop(["target_id","ID_transcrit_y","ID_transcrit_x"],axis=1, errors='ignore')
-    secreted.rename(columns={'tpm': 'TPM_kallisto'}, inplace=True)
+    subprocess.Popen(['salmon','index','-t',transcFilesPath,'-i',('index_'+name)]).communicate()
+    subprocess.Popen(['salmon','quant','-i',('index_'+name),'-l','A','-1',args.R1ReadsFile,'-2',args.R2ReadsFile,'-o','output_salmon']).communicate()
+    quantiSalmon = pandas.read_csv("./output_salmon/quant.sf",delimiter="\t")
+    secreted = pandas.merge(secreted,quantiSalmon[["Name","TPM"]],left_on="ID_transcrit",right_on="target_id")
+    secreted = secreted.drop(["Name","ID_transcrit_y","ID_transcrit_x"],axis=1, errors='ignore')
+    secreted.rename(columns={'tpm': 'TPM_salmon'}, inplace=True)
     secreted.to_csv(name+'_secreted_ORFs.alldata', index=False,sep='\t')
-
-#================================ TPM Quantification RSEM ================================================================================================================================================
-if args.RSEM :
-    CPU = str(mp.cpu_count())
-    try:
-        subprocess.Popen(["rsem-prepare-reference","--bowtie2","--bowtie2-path","/bin",transcFilesPath,"./index"]).communicate()
-        subprocess.Popen(["rsem-calculate-expression","-p",CPU,"--paired-end","--bowtie2",args.R1ReadsFile,args.R2ReadsFile,"./index",name]).communicate()
-        secreted = pandas.read_csv(name+'_secreted_ORFs.alldata',delimiter="\t")
-        tpm = pandas.read_csv(name+".genes.results",delimiter="\t")
-        secreted = pandas.merge(secreted,tpm[["gene_id","TPM"]],left_on="ID_transcrit_x",right_on="gene_id")
-        secreted = secreted.drop(["gene_id"],axis=1, errors='ignore')
-        secreted.rename(columns={'TPM': 'TPM_RSEM'}, inplace=True)
-        secreted.to_csv(name+'_secreted_ORFs.alldata', index=False,sep='\t')
-    except:
-        print("Error with RSEM")
 
 #================================ WoLF PSORT localisation prediction ================================================================================================================================================
 if args.wolfPSortPath is not None:
