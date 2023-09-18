@@ -512,7 +512,7 @@ dataframe_to_fasta(df_All_final_ORF, 'Sequence', 'ID',fasta_ORFs_withSP)
 # We download the pfam database if not present in the folder
 if not os.path.exists('./Pfam-A.hmm'):
     print('Download the PFAM database ...')
-    urllib.request.urlretrieve("http://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/Pfam-A.hmm.gz", "Pfam-A.hmm.gz")
+    urllib.request.urlretrieve("https://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/Pfam-A.hmm.gz", "Pfam-A.hmm.gz")
     with gzip.open('Pfam-A.hmm.gz', 'rb') as fi:
         with open('Pfam-A.hmm', 'wb') as fo:
             shutil.copyfileobj(fi, fo)
@@ -530,16 +530,13 @@ except FileNotFoundError:
 
 #================================ HMMER FILTER OUTPUT ================================================================================================================================================
 
-def parse_hmmsearch_output(tblout_filename, domtblout_filename):
-    df_tblout = pandas.read_csv(tblout_filename, comment="#", delim_whitespace=True, names=["target name","accession_t","query name","accession_Q","E-value","score_1","bias_1","E-value_2","score_2","bias_2","exp","reg","clu","ov","env","dom","rep","inc","description of target"])
+def parse_hmmsearch_output(domtblout_filename):
     df_domtblout = pandas.read_csv(domtblout_filename, comment="#", delim_whitespace=True, names=["target name","accession_t","tlen","query name","accession_Q","qlen","E-value","score_1","bias_1","#","of","c-Evalue","i-Evalue","score_2","bias_2","from_1","to_1","from_2","to_2","from_3","to_3","acc","description of target"])
-    df_tblout.sort_values(["target name", "E-value"], ascending=[True, True], inplace=True)
-    df_domtblout.sort_values(["target name", "E-value"], ascending=[True, True], inplace=True)
-    df_tblout = df_tblout.groupby("target name").first().reset_index()
-    df_domtblout = df_domtblout.groupby("target name").first().reset_index()
-    return (df_tblout,df_domtblout)
+    aggregated_domains = df_domtblout.groupby('target name')['query name'].apply(list).reset_index()
+    aggregated_domains['query name'] = aggregated_domains['query name'].apply(lambda x: list(set(x)))
+    return aggregated_domains
 
-(df_tHMMER,df_dHMMER) = parse_hmmsearch_output((name+'HMMER_output1_target_table.out'),(name+'HMMER_output2_domain_table.out'))
+df_dHMMER = parse_hmmsearch_output((name+'HMMER_output2_domain_table.out'))
 
 #================================ Extract and store information from final output files  ================================================================================================================================================                        
 
@@ -551,11 +548,10 @@ finalStat['NB sequence hit with blastp on in-house toxin Database : '] = len(tox
 #================================ Creation of the final file who merge information about similarity approach and structural approach  ================================================================================================================================================
 
 df_global = pandas.merge(df_FinORFs,df_sequenceSignal,left_on="ID",right_on="ID",how='left')
-df_global = pandas.merge(df_global,df_tHMMER[["target name","query name","accession_Q"]],left_on="ID",right_on="target name",how='left')
-df_global = pandas.merge(df_global,df_dHMMER[["target name","query name","accession_Q"]],left_on="ID",right_on="target name",how='left')
+df_global = pandas.merge(df_global,df_dHMMER[["target name","query name"]],left_on="ID",right_on="target name",how='left')
 df_global = pandas.merge(df_global,toxDBBlast[["qseqid","sseqid","pident","length","evalue"]],left_on="ID",right_on="qseqid",how='left')
-df_global.rename(columns={'Sequence_x': 'AA_seq',"Sequence_y":"SignalSeq","query name_x":"HMMERtarget","accession_Q_x":"HMMER_target_accession","query name_y":"HMMERdomain","accession_Q_y":"HMMER_domain_accession"}, inplace=True)
-df_global = df_global.drop(["target name_x","target name_y","qseqid"],axis=1, errors='ignore')
+df_global.rename(columns={'Sequence_x': 'AA_seq',"Sequence_y":"SignalSeq","query name":"HMMERdomain"}, inplace=True)
+df_global = df_global.drop(["target name","qseqid"],axis=1, errors='ignore')
 df_global = df_global.drop_duplicates(subset=['ID'], keep='first').reset_index()
 
 df_global['AA_seq'].fillna('')
