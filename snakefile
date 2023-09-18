@@ -6,7 +6,7 @@ def get_signalp_splits(wildcards):
 
 
 
-configfile: "config.yaml"
+#configfile: "config.yaml"
 
 
 
@@ -63,7 +63,8 @@ rule build_contaminants_database:
 rule blast_on_contaminants:
 #   Description: performs the actual blast of the contigs against the contaminants database
     input:
-        blast_db = rules.build_contaminants_database.output.blast_db[:-4],
+        blast_db = rules.build_contaminants_database.output.blast_db,
+        blast_db_alias =  config['contaminants'],
         contigs = config['transcriptome'] if 'transcriptome' in config else rules.assemble_transcriptome.output.assembly,
     output:
         blast_result = config['basename'] + ".blastsnuc.out"
@@ -72,7 +73,7 @@ rule blast_on_contaminants:
     threads: config['threads']
     shell:
         """
-        blastn -db {input.blast_db} -query {input.contigs} -out {output.blast_result} -outfmt 6 -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads}
+        blastn -db {input.blast_db_alias} -query {input.contigs} -out {output.blast_result} -outfmt 6 -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads}
         """
 
 rule filter_contaminants:
@@ -106,7 +107,7 @@ rule detect_orfs:
     output:
         aa_sequences = config['basename'] + ".faa"
     params:
-        minlen = "33" if "minlen" not in config else config['minlen'],
+        minlen = "66" if "minlen" not in config else config['minlen'],
         maxlen = "30000000" if "maxlen" not in config else config['maxlen']
     threads: config['threads']
     shell:
@@ -130,11 +131,11 @@ rule cluster_peptides:
         cd-hit -i {input.aa_sequences} -o {output.filtered_aa_sequences} -c {params.threshold} -M {params.memory} -T {threads} 
         """
 
-checkpoint split_fasta: # this is a checkpoint and not a rule as the number of output files is undefined
+rule split_fasta:
     input:
         fasta_file = rules.cluster_peptides.output.filtered_aa_sequences
     output:
-        chunk_dir = directory("split_files")
+        split_dir = directory("split_files")
     params:
         chunk_size = 9000 # using 9000 instead of 50000 for usability in normal desktop/laptop pcs. May be user defined.
     run:
@@ -163,34 +164,42 @@ checkpoint split_fasta: # this is a checkpoint and not a rule as the number of o
                 if batch:
                     yield batch
         # Open the large fasta file and use batch_iterator to split the file into batches of params.chunk_size sequences.
-        os.makedirs(output.chunk_dir, exist_ok=True)
+        os.makedirs(output.split_dir, exist_ok=True)
+        os.makedirs("split_sigp", exist_ok=True)
         record_iter = SeqIO.parse(open(input.fasta_file), "fasta")
         for i, batch in enumerate(batch_iterator(record_iter, params.chunk_size)):
             # Write the current batch to a split fasta file.
-            output_file = f"{output.chunk_dir}/{i + 1}.fasta"
+            output_file = f"{output.split_dir}/{i + 1}.fasta"
             handle = open(output_file, "w")
             SeqIO.write(batch, handle, "fasta")
             handle.close()
 
+import glob
+
+#def get_fasta_splits(wildcards):
+#    chkpt_output = checkpoints.split_fasta.get(**wildcards).output[0]
+#    return glob.glob(f"{chkpt_output}/*.fasta")
+
 rule run_signalp:
     input: 
-        "split_files/{i}.fasta"
+        fasta_file = "split_files/{file_id}.fasta"
     output:
-        "split_files/{i}_summary.signalp"
+        outfile = "split_sigp/{file_id}_summary.signalp5"
     params:
-        prefix = "split_files/{i}.fasta"[:-6]
+        prefix = "split_sigp/{file_id}"
     threads: 
         config['threads']
     shell:
         """
-        signalp -batch 5000 -fasta {input} -org euk -format short -verbose -prefix {params.prefix}
+        signalp -batch 5000 -fasta {input.fasta_file} -org euk -format short -verbose -prefix {params.prefix}
         """
+
+
 
 #todo: rule run_signalp: # requires some testing. 
 #todo: test with stripped sequences. This means that all sequences are preprocessed to be cut to a fixed length that would contain a signal peptide (like 50 or so). this might save memory and improve time. Moreover, we could try deduplicating these cut sequences and rereplicate afterwards to avoid predicting the same signal over and over. 
 #   Description: runs signalp on the detected orfs
 
-
 rule all:
-    input:
-        rules.run_signalp.output
+    input: 
+        expand("split_sigp/{f}_summary.signalp5", f=[i.split("/")[1].split(".")[0] for i in  glob.glob("split_files/*.fasta")])
