@@ -131,9 +131,26 @@ rule cluster_peptides:
         cd-hit -i {input.aa_sequences} -o {output.filtered_aa_sequences} -c {params.threshold} -M {params.memory} -T {threads} 
         """
 
+rule trim_peptides_and_dereplicate:
+#   Description: this rule trims all peptides to only the first 50 aminoacids, as they are the only useful part for signalp. This step improves load time. As a concurrent step, the trimmed peptides are dereplicated with cd-hit -c 1. This might greatly improve runtime for signalp. The output of signalp has to be compared with the cluster file from this step to re-replicate the sequences. 
+    input:
+        aa_sequences = rules.cluster_peptides.output.filtered_aa_sequences
+    output:
+        trimmed_sequences = config['basename'] + ".trimmed.faa",
+        clustered_sequences = config['basename'] + ".trimmed.clustered.faa"
+    threads: 
+        config['threads']
+    run:
+        from Bio import SeqIO
+        import subprocess
+        with open(output.trimmed_sequences, "w") as outfile:
+            for seq in SeqIO.parse(input.aa_sequences, "fasta"):
+                outfile.write(f">{seq.id}\n{seq.seq[:31]}\n")
+        subprocess.Popen(['cd-hit', '-i', output.trimmed_sequences, '-o', output.clustered_sequences, '-c', '1', '-T', str(threads)]).communicate()
+
 rule split_fasta:
     input:
-        fasta_file = rules.cluster_peptides.output.filtered_aa_sequences
+        fasta_file = rules.trim_peptides_and_dereplicate.output.clustered_sequences
     output:
         split_dir = directory("split_files")
     params:
@@ -176,9 +193,9 @@ rule split_fasta:
 
 import glob
 
-#def get_fasta_splits(wildcards):
-#    chkpt_output = checkpoints.split_fasta.get(**wildcards).output[0]
-#    return glob.glob(f"{chkpt_output}/*.fasta")
+def get_fasta_splits(wildcards):
+    chkpt_output = checkpoints.split_fasta.get(**wildcards).output[0]
+    return glob.glob(f"{chkpt_output}/*.fasta")
 
 rule run_signalp:
     input: 
@@ -187,8 +204,6 @@ rule run_signalp:
         outfile = "split_sigp/{file_id}_summary.signalp5"
     params:
         prefix = "split_sigp/{file_id}"
-    threads: 
-        config['threads']
     shell:
         """
         signalp -batch 5000 -fasta {input.fasta_file} -org euk -format short -verbose -prefix {params.prefix}
@@ -200,6 +215,6 @@ rule run_signalp:
 #todo: test with stripped sequences. This means that all sequences are preprocessed to be cut to a fixed length that would contain a signal peptide (like 50 or so). this might save memory and improve time. Moreover, we could try deduplicating these cut sequences and rereplicate afterwards to avoid predicting the same signal over and over. 
 #   Description: runs signalp on the detected orfs
 
-rule all:
+rule all: #todo: there is a bug that makes this rule run even if no split file is done. might solve by adding a checkpoint file at the end of the split rule
     input: 
         expand("split_sigp/{f}_summary.signalp5", f=[i.split("/")[1].split(".")[0] for i in  glob.glob("split_files/*.fasta")])
