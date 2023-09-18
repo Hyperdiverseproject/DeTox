@@ -1,0 +1,7 @@
+Building DAG of jobs...
+Relative file path './split_files' starts with './'. This is redundant and strongly discouraged. It can also lead to inconsistent results of the file-matching approach used by Snakemake. You can simply omit the './' for relative file paths.
+MissingInputException in rule cdhit_clustering in file /home/labgen/github/DeTox/snakefile, line 49:
+Missing input files for rule cdhit_clustering:
+    output: basename.clustered.fasta
+    affected files:
+        /home/labgen/Adamussium_cobecki.ORP.fasta

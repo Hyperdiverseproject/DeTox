@@ -1,0 +1,37 @@
+Building DAG of jobs...
+Relative file path './split_files' starts with './'. This is redundant and strongly discouraged. It can also lead to inconsistent results of the file-matching approach used by Snakemake. You can simply omit the './' for relative file paths.
+Using shell: /usr/bin/bash
+Provided cores: 8
+Rules claiming more threads will be scaled down.
+Job stats:
+job                            count
+---------------------------  -------
+blast_on_contaminants              1
+build_contaminants_database        1
+cdhit_clustering                   1
+cluster_peptides                   1
+detect_orfs                        1
+filter_contaminants                1
+split_fasta                        1
+total                              7
+
+Select jobs to execute...
+
+[Mon Sep 18 12:37:41 2023]
+rule cdhit_clustering:
+    input: /home/labgen/sensu_lato.fasta
+    output: basename.clustered.fasta, basename.clustered
+    jobid: 6
+    reason: Missing output files: basename.clustered.fasta
+    threads: 8
+    resources: tmpdir=/tmp
+
+Waiting at most 5 seconds for missing files.
+MissingOutputException in rule cdhit_clustering in file /home/labgen/github/DeTox/snakefile, line 49:
+Job 6  completed successfully, but some output files are missing. Missing files after 5 seconds. This might be due to filesystem latency. If that is the case, consider to increase the wait time with --latency-wait:
+basename.clustered
+Removing output files of failed job cdhit_clustering since they might be corrupted:
+basename.clustered.fasta
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: .snakemake/log/2023-09-18T123740.651925.snakemake.log

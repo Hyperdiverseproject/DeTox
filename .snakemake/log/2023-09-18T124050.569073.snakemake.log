@@ -1,0 +1,42 @@
+Building DAG of jobs...
+Relative file path './split_files' starts with './'. This is redundant and strongly discouraged. It can also lead to inconsistent results of the file-matching approach used by Snakemake. You can simply omit the './' for relative file paths.
+Using shell: /usr/bin/bash
+Provided cores: 8
+Rules claiming more threads will be scaled down.
+Job stats:
+job                      count
+---------------------  -------
+blast_on_contaminants        1
+cluster_peptides             1
+detect_orfs                  1
+filter_contaminants          1
+split_fasta                  1
+total                        5
+
+Select jobs to execute...
+
+[Mon Sep 18 12:40:51 2023]
+rule blast_on_contaminants:
+    input: test/contaminants.fasta.nin, basename.clustered.fasta
+    output: basename.blastsnuc.out
+    jobid: 4
+    reason: Missing output files: basename.blastsnuc.out
+    threads: 8
+    resources: tmpdir=/tmp
+
+[Mon Sep 18 12:40:51 2023]
+Error in rule blast_on_contaminants:
+    jobid: 4
+    input: test/contaminants.fasta.nin, basename.clustered.fasta
+    output: basename.blastsnuc.out
+    shell:
+        
+        blastn -db test/contaminants.fasta.nin -query basename.clustered.fasta -out basename.blastsnuc.out -outfmt 6 -evalue 1e-5 -max_target_seqs 1 -num_threads 8
+        
+        (one of the commands exited with non-zero exit code; note that snakemake uses bash strict mode!)
+
+Removing output files of failed job blast_on_contaminants since they might be corrupted:
+basename.blastsnuc.out
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: .snakemake/log/2023-09-18T124050.569073.snakemake.log

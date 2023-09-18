@@ -1,3 +1,11 @@
+def get_signalp_splits(wildcards):
+    import os
+    checkpoint_output = checkpoints.split_fasta.get(**wildcards).output[0]
+    return expand('./split_files/{i}.fasta',
+           i=glob_wildcards(os.path.join(checkpoint_output, '{i}.fasta')).i)
+
+
+
 configfile: "config.yaml"
 
 
@@ -40,22 +48,6 @@ rule assemble_transcriptome:
         """
     
 
-rule cdhit_clustering:
-#   Description: Clusters transcriptome sequences using cd-hit-est.
-    input: 
-        transcriptome = config['transcriptome'] if 'transcriptome' in config else rules.assemble_transcriptome.output.assembly
-    output:
-        clustered_transcriptome = config['basename'] + ".clustered.fasta",
-        basename = config['basename'] + ".clustered",
-    params:
-        threshold = config['clustering_threshold'],
-        memory = str(int(config['memory'])*1000),
-    threads: config['threads']
-    shell:
-        """
-        cd-hit-est -i {input.transcriptome} -o {output.clustered_transcriptome} -c {params.threshold} -M {params.memory} -T {threads} 
-        """
-
 rule build_contaminants_database:
 #   Description: builds blast database for the removal of contaminants   
 #   todo: make this optional like in the original code
@@ -71,8 +63,8 @@ rule build_contaminants_database:
 rule blast_on_contaminants:
 #   Description: performs the actual blast of the contigs against the contaminants database
     input:
-        blast_db = rules.build_contaminants_database.output.blast_db,
-        contigs = rules.cdhit_clustering.output.clustered_transcriptome,
+        blast_db = rules.build_contaminants_database.output.blast_db[:-4],
+        contigs = config['transcriptome'] if 'transcriptome' in config else rules.assemble_transcriptome.output.assembly,
     output:
         blast_result = config['basename'] + ".blastsnuc.out"
     params:
@@ -80,14 +72,14 @@ rule blast_on_contaminants:
     threads: config['threads']
     shell:
         """
-        blastn -db {input.blast_db} -query {input.contigs} -out {output.blast_result} -outfmt 6 -evalue {params.evalue} -max_target_seqs 1 -numthreads {threads}
+        blastn -db {input.blast_db} -query {input.contigs} -out {output.blast_result} -outfmt 6 -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads}
         """
 
 rule filter_contaminants:
 #   Description: performs the actual filtering
     input: 
         blast_result = rules.blast_on_contaminants.output.blast_result,
-        contigs = rules.cdhit_clustering.output.clustered_transcriptome,
+        contigs = config['transcriptome'] if 'transcriptome' in config else rules.assemble_transcriptome.output.assembly,
     output:
         filtered_contigs = config['basename'] + ".filtered.fasta"
     run:
@@ -103,7 +95,7 @@ rule filter_contaminants:
         recordIter = SeqIO.parse(open(input.contigs), "fasta")
         with open(output.filtered_contigs, "w") as handle:
             for rec in recordIter:
-                if rec.id not in listIDConta:
+                if rec.id not in records:
                     SeqIO.write(rec, handle, "fasta")
 
 rule detect_orfs:
@@ -115,11 +107,11 @@ rule detect_orfs:
         aa_sequences = config['basename'] + ".faa"
     params:
         minlen = "33" if "minlen" not in config else config['minlen'],
-        maxlen = "3000000000" if "maxlen" not in config else config['maxlen']
+        maxlen = "30000000" if "maxlen" not in config else config['maxlen']
     threads: config['threads']
     shell:
         """
-        orfipy --procs {threads} --start ATG --pep {output.aa_sequences} --min {params.minlen} --max {params.maxlen} {input.nucleotide_sequences}
+        orfipy --procs {threads} --start ATG --pep {output.aa_sequences} --min {params.minlen} --max {params.maxlen} {input.nucleotide_sequences} --outdir .
         """
 
 rule cluster_peptides:
@@ -136,12 +128,61 @@ rule cluster_peptides:
     shell:
         """
         cd-hit -i {input.aa_sequences} -o {output.filtered_aa_sequences} -c {params.threshold} -M {params.memory} -T {threads} 
-        """    
+        """
 
-rule split_fasta:
+checkpoint split_fasta: # this is a checkpoint and not a rule as the number of output files is undefined
     input:
-        rules.cluster_peptides.output.filtered_aa_sequences
-    # todo continue here
+        fasta_file = rules.cluster_peptides.output.filtered_aa_sequences
+    output:
+        chunk_dir = directory("split_files")
+    params:
+        chunk_size = 5000 # using 5000 instead of 50000 for usability in normal desktop/laptop pcs. May be user defined 
+    run:
+        from Bio import SeqIO
+        import os
+        def batch_iterator(iterator, batch_size):
+            """Returns lists of length batch_size.
+
+            This is a generator function, and it returns lists of the
+            entries from the supplied iterator.  Each list will have
+            batch_size entries, although the final list may be shorter.
+            
+            src: https://biopython.org/wiki/Split_large_file
+            """
+            entry = True  # Make sure we loop once
+            while entry:
+                batch = []
+                while len(batch) < batch_size:
+                    try:
+                        entry = next(iterator)
+                    except StopIteration:
+                        entry = None
+                    if entry is None:
+                        break
+                    batch.append(entry)
+                if batch:
+                    yield batch
+        # Open the large fasta file and use batch_iterator to split the file into batches of params.chunk_size sequences.
+        os.makedirs(output.chunk_dir, exist_ok=True)
+        record_iter = SeqIO.parse(open(input.fasta_file), "fasta")
+        for i, batch in enumerate(batch_iterator(record_iter, params.chunk_size)):
+            # Write the current batch to a split fasta file.
+            output_file = f"{output.chunk_dir}/{i + 1}.fasta"
+            handle = open(output_file, "w")
+            SeqIO.write(batch, handle, "fasta")
+            handle.close()
+
+        
+
+rule merge_files:
+    input: 
+        get_signalp_splits
+    output:
+        "merged.fasta"
+    shell:
+        """
+        cat {input} > {output}
+        """
 
 #todo: rule run_signalp: # requires some testing. 
 #todo: test with stripped sequences. This means that all sequences are preprocessed to be cut to a fixed length that would contain a signal peptide (like 50 or so). this might save memory and improve time. Moreover, we could try deduplicating these cut sequences and rereplicate afterwards to avoid predicting the same signal over and over. 
@@ -150,4 +191,4 @@ rule split_fasta:
 
 rule all:
     input:
-        rules.detect_orfs.output.aa_sequences
+        rules.merge_files.output
