@@ -136,7 +136,7 @@ checkpoint split_fasta: # this is a checkpoint and not a rule as the number of o
     output:
         chunk_dir = directory("split_files")
     params:
-        chunk_size = 5000 # using 5000 instead of 50000 for usability in normal desktop/laptop pcs. May be user defined 
+        chunk_size = 9000 # using 9000 instead of 50000 for usability in normal desktop/laptop pcs. May be user defined.
     run:
         from Bio import SeqIO
         import os
@@ -172,16 +172,18 @@ checkpoint split_fasta: # this is a checkpoint and not a rule as the number of o
             SeqIO.write(batch, handle, "fasta")
             handle.close()
 
-        
-
-rule merge_files:
+rule run_signalp:
     input: 
-        get_signalp_splits
+        "split_files/{i}.fasta"
     output:
-        "merged.fasta"
+        "split_files/{i}_summary.signalp"
+    params:
+        prefix = "split_files/{i}.fasta"[:-6]
+    threads: 
+        config['threads']
     shell:
         """
-        cat {input} > {output}
+        signalp -batch 5000 -fasta {input} -org euk -format short -verbose -prefix {params.prefix}
         """
 
 #todo: rule run_signalp: # requires some testing. 
@@ -191,4 +193,4 @@ rule merge_files:
 
 rule all:
     input:
-        rules.merge_files.output
+        rules.run_signalp.output

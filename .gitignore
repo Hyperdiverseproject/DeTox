@@ -1,0 +1,3 @@
+test/
+.snakemake/
+test_run/
