@@ -53,7 +53,7 @@ rule cdhit_clustering:
     threads: config['threads']
     shell:
         """
-        cd-hit-est -i {input.transcriptome} -o {output.basename} -c {params.threshold} -M {params.memory} -T {threads} 
+        cd-hit-est -i {input.transcriptome} -o {output.clustered_transcriptome} -c {params.threshold} -M {params.memory} -T {threads} 
         """
 
 rule build_contaminants_database:
@@ -135,7 +135,7 @@ rule cluster_peptides:
     threads: config['threads']
     shell:
         """
-        cd-hit -i {input.aa_sequences} -o {params.basename} -c {params.threshold} -M {params.memory} -T {threads} 
+        cd-hit -i {input.aa_sequences} -o {output.filtered_aa_sequences} -c {params.threshold} -M {params.memory} -T {threads} 
         """    
 
 rule split_fasta:
