@@ -278,6 +278,37 @@ rule extract_non_TM_peptides:
                     SeqIO.write(seq, outfile, "fasta")
 
 
+rule build_toxin_blast_db: #todo: do we switch to diamond for max speed?
+#   Description: builds a blast database for toxin prediction
+    input:
+        db = config['toxin_db']
+    output:
+        outfile = "{input}.nin"
+        alias = '{input.db}'
+    shell:
+        """
+        makeblastdb -dbtype prot -in {input}
+        """
+
+rule blast_on_toxins:
+#   Description: runs blastp against the toxin database of all peptides. This will be used later when merging with structure-based information. Changed to a single run on the original file rather than on multiple runs to avoid redundancy and save a little IO time 
+    input:
+        fasta_file = rules.cluster_peptides.output.filtered_aa_sequences,
+        db_file = rules.build_toxin_blast_db.output.outfile
+        blast_db_alias = rules.build_toxin_blast_db.output.alias
+    output:
+        blast_result = "toxin_blast_results.tsv"
+    params:
+        evalue = config['toxins_evalue'] if 'toxins_evalue' in config else "1e-10"
+    threads: 
+        config['threads']
+    shell:
+        """
+        blastp -query {input.fasta_file} -evalue {params.evalue} -max_target_seqs 1 -threads {threads} -db {input.blast_db_alias} -outfmt 6 -out {output.blast_result}
+        """
+
+# TODO: follow this comment for the rule that will wraps everything up and create the final table. -> Also, in my opinion these peptides should be marked with a warning flag in the output, specifying which issue affects them (e.g. “this peptide lacks a signal peptide”, “this peptide contains a transmembrane domain”, etc.)
+
 
 #todo: try to run signalp during the split rule to avoid problems. issue: if the process is interrupted abnormally during the run the rule is almost certain to misbehave and rerun the whole thing
 

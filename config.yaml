@@ -6,6 +6,8 @@ R1: test/R1.fastq.gz
 R2: test/R2.fastq.gz
 adapters: test/adapters.fasta
 contaminants: test/contaminants.fasta 
+toxin_db: test/toxin_db.fasta
+toxins_evalue: "1e-10"
 contamination_evalue: "1e-5"
 clustering_threshold: "0.9"
 maxlen: 450
