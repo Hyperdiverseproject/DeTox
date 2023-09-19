@@ -332,6 +332,19 @@ rule run_hmmer:
         hmmsearch --cut_ga --cpu {threads} --domtblout {output.domtblout} --tblout {output.tblout} {input.pfam_db} {input.fasta_file} 
         """
 
+rule parse_hmmsearch_output:
+#   Description: parses and aggregates the hmmer output, uses the domtblout file
+    input: 
+        domtblout = rules.run_hmmer.output.domtblout
+    output:
+        filtered_table = config['basename'] + ".domtblout.tsv"
+    run:
+        df_domtblout = pandas.read_csv("{input.domtblout}", comment="#", delim_whitespace=True, names=["target name","accession_t","tlen","query name","accession_Q","qlen","E-value","score_1","bias_1","#","of","c-Evalue","i-Evalue","score_2","bias_2","from_1","to_1","from_2","to_2","from_3","to_3","acc","description of target"])
+        aggregated_domains = df_domtblout.groupby('target name')['query name'].apply(list).reset_index()
+        aggregated_domains['query name'] = aggregated_domains['query name'].apply(lambda x: list(set(x)))
+        aggregated_domains.to_csv("{output.filtered_table}", sep="\t", index=False)
+
+
 
 # TODO: follow this comment for the rule that will wraps everything up and create the final table. -> Also, in my opinion these peptides should be marked with a warning flag in the output, specifying which issue affects them (e.g. “this peptide lacks a signal peptide”, “this peptide contains a transmembrane domain”, etc.)
 
