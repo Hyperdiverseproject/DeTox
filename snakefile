@@ -307,6 +307,32 @@ rule blast_on_toxins:
         blastp -query {input.fasta_file} -evalue {params.evalue} -max_target_seqs 1 -threads {threads} -db {input.blast_db_alias} -outfmt 6 -out {output.blast_result}
         """
 
+rule download_pfam:
+#   Description: downloads pfam database. I'd like to leave it this way as the database is fairly small and will be downloaded in parallel with slow steps. 
+    output:
+        pfam_db = "Pfam-A.hmm"
+    shell:
+        """
+        wget -c https://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/Pfam-A.hmm.gz && gunzip Pfam-A.hmm.gz
+        """
+
+rule run_hmmer:
+#   Description: runs hmmer against the pfam database. 
+    input:
+        pfam_db = rules.download_pfam.output.pfam_db
+    output:
+        tblout = config['basename'] + ".tblout"
+        domtblout = config['basename'] + ".domtblout"
+    params:
+        evalue = config['pfam_evalue'] if 'pfam_evalue' in config else "1e-5"
+    threads: 
+        config['threads']
+    shell:
+        """
+        hmmsearch --cut_ga --cpu {threads} --domtblout {output.domtblout} --tblout {output.tblout} {input.pfam_db} {input.fasta_file} 
+        """
+
+
 # TODO: follow this comment for the rule that will wraps everything up and create the final table. -> Also, in my opinion these peptides should be marked with a warning flag in the output, specifying which issue affects them (e.g. “this peptide lacks a signal peptide”, “this peptide contains a transmembrane domain”, etc.)
 
 
