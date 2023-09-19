@@ -459,6 +459,9 @@ phobius_filter_df = phobius_filter_df[phobius_filter_df["TM"]==0]
 phobius_filter_df = phobius_filter_df.drop(["TM","SP","Prediction","SequenceID"],axis=1, errors='ignore')
 dataframe_to_fasta(phobius_filter_df, "Sequence", "ID",(name+'_finalORFs.fasta'))
 
+# TODO: siamo qua
+
+
 #================================ Similarity approach, detection of toxins from ORFs with a blastp on a toxin database ================================================================================================================================================
 
 try:
@@ -469,46 +472,59 @@ except FileNotFoundError:
     sys.exit()
 
 #================================ Search of toxines in ORF without Signal peptide =====================================================================================================================================================================================
-
+# Define the input and output file names
 fasta_ORFs = "CDS-Clustered.fasta"
 fasta_ORFs_withSP = name+'_finalORFs.fasta'
 fasta_ORFs_withoutSP = name+"_SequenceWithoutSP.fa"
 ORFS_withoutSP_with_blastHit = name+"_ORFS_withoutSP_with_blastHit.out"
 
-# Liste des identifiants dans le fichier FASTA 2
+# Get the list of identifiers in the fasta_ORFs_withSP file
 ids_fasta2 = [record.id for record in SeqIO.parse(fasta_ORFs_withSP, "fasta")]
 
-# Liste des séquences dans le fichier FASTA 1 mais pas dans le fichier FASTA 2
+# Find the sequences in fasta_ORFs that are not present in fasta_ORFs_withSP
 sequences_only_in_fasta1 = []
 for record in SeqIO.parse(fasta_ORFs, "fasta"):
+    # Check if the record id is not present in the ids_fasta2 list
     if record.id.split(" ")[0] not in ids_fasta2:
-        record.id=record.id.split(" ")[0]
-        record.description=record.description.split(" ")[0]
+        # Update the record id and description
+        record.id = record.id.split(" ")[0]
+        record.description = record.description.split(" ")[0]
+        # Append the record to the sequences_only_in_fasta1 list
         sequences_only_in_fasta1.append(record)
 
-# Écrit les séquences dans le fichier de sortie
+# Write the sequences to the fasta_ORFs_withoutSP file
 with open(fasta_ORFs_withoutSP, "w") as f:
     SeqIO.write(sequences_only_in_fasta1, f, "fasta")
 
+# Convert fasta_ORFs_withoutSP to a dataframe
 dfSequenceWithoutSP = fastaToDataframe(fasta_ORFs_withoutSP)
-blastp_cline = NcbiblastpCommandline(query=fasta_ORFs_withoutSP, db=args.ToxinDatabase, evalue=args.BlastpToxinesEvalue, outfmt=6,max_target_seqs=1,out=ORFS_withoutSP_with_blastHit)
-blastp_cline()
-blast_results_withoutSP = pandas.read_csv(ORFS_withoutSP_with_blastHit, sep='\t', header=None, names=["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"])
-df_ORFs_withoutSP_whithToxinBLast = pandas.merge(dfSequenceWithoutSP,blast_results_withoutSP,left_on="ID",right_on="qseqid")
 
-# ADD blast result of ORF without SP in blast file
-blast_df_withSP = pandas.read_csv(name+"_finalORFs.blastsprot.out", sep="\t",names=["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"])
+# Run blastp command with fasta_ORFs_withoutSP as the query sequence
+blastp_cline = NcbiblastpCommandline(query=fasta_ORFs_withoutSP, db=args.ToxinDatabase, evalue=args.BlastpToxinesEvalue, outfmt=6, max_target_seqs=1, out=ORFS_withoutSP_with_blastHit)
+blastp_cline()
+
+# Read the blast results from ORFS_withoutSP_with_blastHit file into a dataframe
+blast_results_withoutSP = pandas.read_csv(ORFS_withoutSP_with_blastHit, sep='\t', header=None, names=["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"])
+
+# Merge the dfSequenceWithoutSP and blast_results_withoutSP dataframes on the "ID" column
+df_ORFs_withoutSP_withToxinBLast = pandas.merge(dfSequenceWithoutSP, blast_results_withoutSP, left_on="ID", right_on="qseqid")
+
+# Read blast_df_withSP from name+"_finalORFs.blastsprot.out" file into a dataframe
+blast_df_withSP = pandas.read_csv(name+"_finalORFs.blastsprot.out", sep="\t", names=["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"])
+
+# Concatenate blast_df_withSP and blast_results_withoutSP dataframes
 blast_df = pandas.concat([blast_df_withSP, blast_results_withoutSP], ignore_index=True)
+
+# Write blast_df to name+"_finalORFs.blastsprot.out" file
 fichier_blast = open(name+"_finalORFs.blastsprot.out", "w")
 blast_df.to_csv(fichier_blast, sep="\t", index=False, header=False)
 fichier_blast.close()
 
-# ADD sequence of ORF without SP in finalORF file
-
+# Convert fasta_ORFs_withSP to a dataframe
 dfSequenceWithSP = fastaToDataframe(fasta_ORFs_withSP)
-df_ORFs_withoutSP_whithToxinBLast = df_ORFs_withoutSP_whithToxinBLast[["ID","Sequence"]]
-df_All_final_ORF = pandas.concat([df_ORFs_withoutSP_whithToxinBLast, dfSequenceWithSP], ignore_index=True)
-dataframe_to_fasta(df_All_final_ORF, 'Sequence', 'ID',fasta_ORFs_withSP)
+
+# Select "ID" and "Sequence" columns from df_ORFs_withoutSP_withToxinBLast dataframe
+df_ORFs_withoutSP_withToxinBLast = df_ORFs
 
 #================================ HMMER ANOTATION ===================================================================================================================================================
 
