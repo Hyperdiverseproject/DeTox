@@ -256,14 +256,34 @@ rule run_phobius: #todo: remember to inform the user about the installation proc
         table = "phobius_predictions.tsv"
     shell:
         """
-        phobius -short {input} | sed 's/\s\+/\t/g' > {output.table}
+        phobius -short {input} | sed 's/\s\+/\t/g' | awk '$2 == 0' > {output.table}
         """
+
+rule extract_non_TM_peptides:
+#   Description: extracts non-TM peptides from the phobius output
+    input:
+        phobius_result = rules.run_phobius.output.table,
+        fasta_file = rules.extract_secreted_peptides.output.secreted_peptides
+    output:
+        non_TM_peptides = "non_TM_peptides.fasta"
+    run:
+        from Bio import SeqIO
+        with open(str(input.phobius_result)) as infile:
+            records = []
+            for line in infile:
+                records.append(line.rstrip().split("\t")[0])
+        with open(output.non_TM_peptides, "w") as outfile:
+            for seq in SeqIO.parse(input.fasta_file, "fasta"):
+                if seq.id in records:
+                    SeqIO.write(seq, outfile, "fasta")
+
+
 
 #todo: try to run signalp during the split rule to avoid problems. issue: if the process is interrupted abnormally during the run the rule is almost certain to misbehave and rerun the whole thing
 
 #todo: rule run_signalp: # requires some testing. 
 #todo: test with stripped sequences. This means that all sequences are preprocessed to be cut to a fixed length that would contain a signal peptide (like 50 or so). this might save memory and improve time. Moreover, we could try deduplicating these cut sequences and rereplicate afterwards to avoid predicting the same signal over and over. 
-#   Description: runs signalp on the detected orfs
+
 
 rule all: #todo: there is a bug that makes this rule run even if no split file is done. might solve by adding a checkpoint file at the end of the split rule
     input: 
