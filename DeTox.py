@@ -377,58 +377,61 @@ subprocess.Popen([f"rm -r {dirTest}"],shell=True).communicate()
 #================================ CHECKS RESULTS OF THE SignalP RUN AND COPY THEN IN NEW FILES =======================================================================================================
 
 def checkSignalpResultAndParse(signalPFilePath,ORFfilePath,Dvalue,outORFsNameFile,outSSNameFile):
-    """CHECKS RESULTS OF THE SignalP RUN, the file produce by signalp doesn't contain the sequence but only ID
-    So this function use IDs of signalp output to get sequence in original ORFs file
+    """CHECKS RESULTS OF THE SignalP RUN, the file produced by signalp doesn't contain the sequence but only the ID.
+    So this function uses IDs of signalp output to get the sequence from the original ORFs file.
     
-    Le fichier de signalp contient toute les potentiel ORF détecter mais beaucoup sont classer comme "OTHER". Celle ci ne
-    nous interesse pas car elles n'ont pas été identifier. Ce filtre permet de conserver uniquement les séquence identifier et qui
-    on une DValue > a un seuil.
+    The signalp file contains all the potential ORFs detected, but many are classified as "OTHER". We are not 
+    interested in these since they have not been identified. This filter retains only the identified sequences 
+    that have a DValue > threshold.
 
     Args:
-        signalPFilePath (str): _description_
-        ORFfilePath (str): _description_
-        Dvalue (float): Probality value
-        outORFsNameFile (str): sequence of ORFs containing a signal peptide
-        outSSNameFile (str): signal sequence after cleavage
+        signalPFilePath (str): Path to the SignalP output file.
+        ORFfilePath (str): Path to the original ORFs file.
+        Dvalue (float): Probability threshold value.
+        outORFsNameFile (str): Output file path for sequences of ORFs containing a signal peptide.
+        outSSNameFile (str): Output file path for the signal sequence after cleavage.
     """
-    sigdata = open(signalPFilePath, 'r')  # On ouvre le fichier de sequences signalp
+    sigdata = open(signalPFilePath, 'r')  # Open the SignalP sequences file
     signalin = []
     sigends = []
     for line in sigdata:
-        line = line.strip()     # On supprime les caractères de début et de fin
-        if line[0] !='#':       # si le premiere caractere de la ligne est différent de #      
-            data = line.split('\t')         # On split la ligne sur les tabulations
-            if data[1] != 'OTHER' and float(data[2]) >= float(Dvalue):         # si le deuxième éléments est différent de OTHER et que la probabilité d'avoir un signal peptide ( colonne 3 ) est supérieur a la DValue
-                signalin.append(data[0])            # On ajoute l'identifiant de l'ORF        
-                sigend = line[line.index('CS pos: ')+len('CS pos: '): line.index('CS pos: ')+len('CS pos: ')+2].split("-")[0] # coordonné du site de clivage dans la séquence
+        line = line.strip()     # Remove leading and trailing characters
+        if line[0] != '#':      # If the first character of the line is different from #
+            data = line.split('\t')          # Split the line on tabs
+            # If the second element is different from OTHER and the probability of having a signal peptide (column 3) is higher than DValue
+            if data[1] != 'OTHER' and float(data[2]) >= float(Dvalue):         
+                signalin.append(data[0])      # Add the ORF identifier
+                # Get the cleavage site coordinates in the sequence
+                sigend = line[line.index('CS pos: ')+len('CS pos: '): line.index('CS pos: ')+len('CS pos: ')+2].split("-")[0]
                 if '?' in sigend:
-                    sigends.append('q')             # ajouter 'q' si il y a un ? dans les coordonnées
+                    sigends.append('q')        # Add 'q' if there's a ? in the coordinates
                 else:
-                    sigends.append(int(sigend))       # ajouter les coordonnées du site de clivage dans sigends
-    sigdata.close()                                     # On ferme le fichier 
+                    sigends.append(int(sigend))  # Add the cleavage site coordinates to sigends
+    sigdata.close()                           # Close the file
     print('ORFs with signal sequence:', len(signalin), len(sigends))
     finalStat['ORFs with signal sequence:'] = len(signalin)
-    print('ORFs with unresolved Signal Séquence boundary:', sigends.count('q'))
-    finalStat['ORFs with unresolved Signal Séquence boundary:'] = sigends.count('q')
-    nbORF=0
-    allORFsfasta = open(ORFfilePath, 'r')        # on ouvre le fichier d'ORF
-    outORFsfasta = open(outORFsNameFile, 'w')       # on ouvre le fichier d'écriture des séquence des ORFs contenant un peptide signal
-    outSSfasta = open(outSSNameFile, 'w')           # fichier ou on écrit les signals sequences après clivage
-    for line in allORFsfasta:               # pour chaque ligne des ORFs 
-        line=line.strip()                       # on supprime les caractères d'espacement de début et de fin
-        if line.startswith('>'):                # si la ligne commence par un '>'
-            nbORF+=1
-            ORFID = line[1:].split()[0]             # on recupere l'id de l'ORF qui se trouve en première position après avoir split sur l'espace
-            if ORFID in signalin:                       # si cette ORF est presente dans la liste des ORF detecter par signalp
-                seq = next(allORFsfasta).strip()       # On recupere la sequence de l'ORF
-                ind = signalin.index(ORFID)             # on recupère l'indice de la sequence dans la liste des ORF avec peptide signal
-                send = sigends[ind]                     # on recupére les coordonné de clivage dans la séquence ORF
-                if send != 'q':                                 # si c'est différent de q 
-                    outORFsfasta.write('>'+ORFID+'\n')                  # On réécrit la séquence complete
-                    outORFsfasta.write(seq.replace('*', '')+'\n')       # de l'ORF dont on a détecter un peptide signal
-                    
-                    outSSfasta.write('>'+ORFID+'\n')                    # On écrit uniquement la séquence de la protéine 
-                    outSSfasta.write(seq[:send]+'\n')                   # On recupere la séquence signal contenu entre le début et le site de clivage
+    print('ORFs with unresolved Signal Sequence boundary:', sigends.count('q'))
+    finalStat['ORFs with unresolved Signal Sequence boundary:'] = sigends.count('q')
+    nbORF = 0
+    allORFsfasta = open(ORFfilePath, 'r')     # Open the ORF file
+    outORFsfasta = open(outORFsNameFile, 'w')  # Open the writing file for ORF sequences containing a signal peptide
+    outSSfasta = open(outSSNameFile, 'w')      # File to write the signal sequences after cleavage
+    for line in allORFsfasta:                  # For each line of the ORFs
+        line = line.strip()                    # Remove leading and trailing characters
+        if line.startswith('>'):               # If the line starts with '>'
+            nbORF += 1
+            # Get the ORF ID located in the first position after splitting on space
+            ORFID = line[1:].split()[0]
+            # If this ORF is present in the list of ORFs detected by SignalP
+            if ORFID in signalin:                      
+                seq = next(allORFsfasta).strip()      # Retrieve the ORF sequence
+                ind = signalin.index(ORFID)           # Get the index of the sequence in the list of ORFs with signal peptide
+                send = sigends[ind]                   # Retrieve the cleavage coordinates in the ORF sequence
+                if send != 'q':                       # If it's different from q
+                    outORFsfasta.write('>'+ORFID+'\n')                # Rewrite the complete sequence
+                    outORFsfasta.write(seq.replace('*', '')+'\n')     # of the ORF where a signal peptide was detected
+                    outSSfasta.write('>'+ORFID+'\n')                  # Write only the protein sequence
+                    outSSfasta.write(seq[:send]+'\n')                 # Retrieve the signal sequence contained between the start and the cleavage site
     finalStat['NB ORFs detected by ORFfinder:'] = nbORF
     allORFsfasta.close()
     outORFsfasta.close()
