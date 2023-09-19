@@ -230,20 +230,31 @@ rule extract_secreted_peptides:
         signalp_result = rules.filter_signalp_outputs.output,
         fasta_file = rules.cluster_peptides.output.filtered_aa_sequences
     output:
-        secreted_peptides = "secreted_peptides.fasta"
+        secreted_peptides = "secreted_peptides.fasta",
+        non_secreted_peptides = "non_secreted_peptides.fasta"
     run:
         from Bio import SeqIO
         with open(str(input.signalp_result)) as infile:
             records = []
             for line in infile:
                 records.append(line.rstrip().split("\t")[0])
-        with open(output.secreted_peptides, "w") as outfile:
-            for seq in SeqIO.parse(input.fasta_file, "fasta"):
-                if seq.id in records:
-                    SeqIO.write(seq, outfile, "fasta")
+        with open(output.non_secreted_peptides, "w") as n_outfile:
+            with open(output.secreted_peptides, "w") as outfile:
+                for seq in SeqIO.parse(input.fasta_file, "fasta"):
+                    if seq.id in records:
+                        SeqIO.write(seq, outfile, "fasta")
+                    else:
+                        SeqIO.write(seq, n_outfile, "fasta")
 
 
-# todo: rule to merge multiple files
+
+rule run_phobius: #todo: remember to inform the user about the installation procedure. I added a dependency in the conda env with a convenient installation script
+#   Description: runs phobius
+    input: 
+        rules.extract_secreted_peptides.output.secreted_peptides
+    output:
+
+#todo: try to run signalp during the split rule to avoid problems. issue: if the process is interrupted abnormally during the run the rule is almost certain to misbehave and rerun the whole thing
 
 #todo: rule run_signalp: # requires some testing. 
 #todo: test with stripped sequences. This means that all sequences are preprocessed to be cut to a fixed length that would contain a signal peptide (like 50 or so). this might save memory and improve time. Moreover, we could try deduplicating these cut sequences and rereplicate afterwards to avoid predicting the same signal over and over. 

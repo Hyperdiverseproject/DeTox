@@ -6,6 +6,7 @@ name: DeToX
 channels:
   - bioconda 
   - conda-forge
+  - predector
 dependencies:
   - snakemake
   - salmon
@@ -17,3 +18,4 @@ dependencies:
   - python
   - biopython
   - orfipy
+  - phobius
