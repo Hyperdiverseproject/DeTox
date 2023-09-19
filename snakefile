@@ -253,6 +253,11 @@ rule run_phobius: #todo: remember to inform the user about the installation proc
     input: 
         rules.extract_secreted_peptides.output.secreted_peptides
     output:
+        table = "phobius_predictions.tsv"
+    shell:
+        """
+        phobius -short {input} | sed 's/\s\+/\t/g' > {output.table}
+        """
 
 #todo: try to run signalp during the split rule to avoid problems. issue: if the process is interrupted abnormally during the run the rule is almost certain to misbehave and rerun the whole thing
 
