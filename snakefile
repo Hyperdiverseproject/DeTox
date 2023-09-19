@@ -131,13 +131,12 @@ rule cluster_peptides:
         cd-hit -i {input.aa_sequences} -o {output.filtered_aa_sequences} -c {params.threshold} -M {params.memory} -T {threads} 
         """
 
-rule trim_peptides_and_dereplicate:
-#   Description: this rule trims all peptides to only the first 50 aminoacids, as they are the only useful part for signalp. This step improves load time. As a concurrent step, the trimmed peptides are dereplicated with cd-hit -c 1. This might greatly improve runtime for signalp. The output of signalp has to be compared with the cluster file from this step to re-replicate the sequences. 
+rule trim_peptides:
+#   Description: this rule trims all peptides to only the first 50 aminoacids, as they are the only useful part for signalp. This step improves load time.
     input:
         aa_sequences = rules.cluster_peptides.output.filtered_aa_sequences
     output:
         trimmed_sequences = config['basename'] + ".trimmed.faa",
-        clustered_sequences = config['basename'] + ".trimmed.clustered.faa"
     threads: 
         config['threads']
     run:
@@ -146,11 +145,11 @@ rule trim_peptides_and_dereplicate:
         with open(output.trimmed_sequences, "w") as outfile:
             for seq in SeqIO.parse(input.aa_sequences, "fasta"):
                 outfile.write(f">{seq.id}\n{seq.seq[:31]}\n")
-        subprocess.Popen(['cd-hit', '-i', output.trimmed_sequences, '-o', output.clustered_sequences, '-c', '1', '-T', str(threads)]).communicate()
+
 
 checkpoint split_fasta:
     input:
-        fasta_file = rules.trim_peptides_and_dereplicate.output.clustered_sequences
+        fasta_file = rules.trim_peptides.output.trimmed_sequences
     output:
         split_dir = directory("split_files"),
         marker = "split_fasta.done"
@@ -213,7 +212,38 @@ rule run_signalp:
         signalp -batch 5000 -fasta {input.fasta_file} -org euk -format short -verbose -prefix {params.prefix}
         """
 
+rule filter_signalp_outputs:
+#   Description: this rule filters the output of the multiple signalp runs and extracts only those with a probability of signal peptide greater than a threshold. Only one file should be produced from the multiple signalp files. Two outputs are expected: a filtered (or not?) table with the signalp results and a filtered fasta of only those peptides with a signal
+    input:
+        files = expand("{file_id}", file_id = glob.glob("split_sigp/*.signalp5"))
+    output:
+        "filtered_sigp.tsv"
+    params:
+        threshold = 0.8 # todo: user defined
+    shell:
+        """
+        cat {input.files} | sed '/^#/d' | awk '$3 > {params.threshold}' > {output}
+        """
 
+rule extract_secreted_peptides:
+    input:
+        signalp_result = rules.filter_signalp_outputs.output,
+        fasta_file = rules.cluster_peptides.output.filtered_aa_sequences
+    output:
+        secreted_peptides = "secreted_peptides.fasta"
+    run:
+        from Bio import SeqIO
+        with open(str(input.signalp_result)) as infile:
+            records = []
+            for line in infile:
+                records.append(line.rstrip().split("\t")[0])
+        with open(output.secreted_peptides, "w") as outfile:
+            for seq in SeqIO.parse(input.fasta_file, "fasta"):
+                if seq.id in records:
+                    SeqIO.write(seq, outfile, "fasta")
+
+
+# todo: rule to merge multiple files
 
 #todo: rule run_signalp: # requires some testing. 
 #todo: test with stripped sequences. This means that all sequences are preprocessed to be cut to a fixed length that would contain a signal peptide (like 50 or so). this might save memory and improve time. Moreover, we could try deduplicating these cut sequences and rereplicate afterwards to avoid predicting the same signal over and over. 
@@ -221,5 +251,6 @@ rule run_signalp:
 
 rule all: #todo: there is a bug that makes this rule run even if no split file is done. might solve by adding a checkpoint file at the end of the split rule
     input: 
+        rules.extract_secreted_peptides.output,
         split_done = "split_fasta.done",
         signalp_files = expand("split_sigp/{f}_summary.signalp5", f=[i.split("/")[1].split(".")[0] for i in  glob.glob("split_files/*.fasta")])
