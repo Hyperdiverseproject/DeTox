@@ -148,11 +148,12 @@ rule trim_peptides_and_dereplicate:
                 outfile.write(f">{seq.id}\n{seq.seq[:31]}\n")
         subprocess.Popen(['cd-hit', '-i', output.trimmed_sequences, '-o', output.clustered_sequences, '-c', '1', '-T', str(threads)]).communicate()
 
-rule split_fasta:
+checkpoint split_fasta:
     input:
         fasta_file = rules.trim_peptides_and_dereplicate.output.clustered_sequences
     output:
-        split_dir = directory("split_files")
+        split_dir = directory("split_files"),
+        marker = "split_fasta.done"
     params:
         chunk_size = 9000 # using 9000 instead of 50000 for usability in normal desktop/laptop pcs. May be user defined.
     run:
@@ -182,7 +183,6 @@ rule split_fasta:
                     yield batch
         # Open the large fasta file and use batch_iterator to split the file into batches of params.chunk_size sequences.
         os.makedirs(output.split_dir, exist_ok=True)
-        os.makedirs("split_sigp", exist_ok=True)
         record_iter = SeqIO.parse(open(input.fasta_file), "fasta")
         for i, batch in enumerate(batch_iterator(record_iter, params.chunk_size)):
             # Write the current batch to a split fasta file.
@@ -190,6 +190,8 @@ rule split_fasta:
             handle = open(output_file, "w")
             SeqIO.write(batch, handle, "fasta")
             handle.close()
+        with open(output.marker, "w") as f: # touches the file. Might come useful for storing information later
+            f.write('')
 
 import glob
 
@@ -199,13 +201,15 @@ def get_fasta_splits(wildcards):
 
 rule run_signalp:
     input: 
-        fasta_file = "split_files/{file_id}.fasta"
+        fasta_file = "split_files/{file_id}.fasta",
+        marker = "split_fasta.done"
     output:
         outfile = "split_sigp/{file_id}_summary.signalp5"
     params:
         prefix = "split_sigp/{file_id}"
     shell:
         """
+        mkdir -p split_sigp
         signalp -batch 5000 -fasta {input.fasta_file} -org euk -format short -verbose -prefix {params.prefix}
         """
 
@@ -217,4 +221,5 @@ rule run_signalp:
 
 rule all: #todo: there is a bug that makes this rule run even if no split file is done. might solve by adding a checkpoint file at the end of the split rule
     input: 
-        expand("split_sigp/{f}_summary.signalp5", f=[i.split("/")[1].split(".")[0] for i in  glob.glob("split_files/*.fasta")])
+        split_done = "split_fasta.done",
+        signalp_files = expand("split_sigp/{f}_summary.signalp5", f=[i.split("/")[1].split(".")[0] for i in  glob.glob("split_files/*.fasta")])
