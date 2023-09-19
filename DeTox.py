@@ -158,6 +158,11 @@ parser.add_argument("-ES",
                       help="Blastp Evalue on the SwissProt database",
                       dest="BlastpSwissprotEvalue",
                       default="1E-5")
+parser.add_argument("-tpm",
+                      type=str,
+                      help="TPM threshold used to select highly expressed sequences",
+                      dest="TPMthreshold",
+                      default="1000")
 
 args = parser.parse_args()
 
@@ -550,7 +555,7 @@ finalStat['NB sequence hit with blastp on in-house toxin Database : '] = len(tox
 df_global = pandas.merge(df_FinORFs,df_sequenceSignal,left_on="ID",right_on="ID",how='left')
 df_global = pandas.merge(df_global,df_dHMMER[["target name","query name"]],left_on="ID",right_on="target name",how='left')
 df_global = pandas.merge(df_global,toxDBBlast[["qseqid","sseqid","pident","length","evalue"]],left_on="ID",right_on="qseqid",how='left')
-df_global.rename(columns={'Sequence_x': 'AA_seq',"Sequence_y":"SignalSeq","query name":"HMMERdomain"}, inplace=True)
+df_global.rename(columns={'Sequence_x': 'AA_seq',"Sequence_y":"SignalSeq","query name":"HMMERdomain","sseqid":"ID_blast_toxinDB","pident":"PID_blast_toxin","length":"length_blast_toxin","evalue":"Evalue_blast_toxin"}, inplace=True)
 df_global = df_global.drop(["target name","qseqid"],axis=1, errors='ignore')
 df_global = df_global.drop_duplicates(subset=['ID'], keep='first').reset_index()
 
@@ -676,6 +681,28 @@ if args.SwissProtDatabase:
     except FileNotFoundError:
         print("The blast program is not installed or was not found by the pipeline")
         sys.exit()
+
+
+#================================ Rating proteins ================================================================================================================================================
+
+try:
+    secreted = pandas.read_csv(name+'_secreted_ORFs.alldata',delimiter="\t")
+    secreted = secreted.assign(Rating='')
+    secreted['Rating'] = secreted.apply(lambda row: str(row['Rating'] + 'S') if pandas.notna(row['SignalSeq']) else str(row['Rating'] + '*'), axis=1)
+    secreted['Rating'] = secreted.apply(lambda row: str(row['Rating'] + 'B') if (row['ID_blast_toxinDB'] != "nohit" ) else row['Rating'], axis=1)
+    if 'CysPattern' in secreted.columns:
+        secreted['Rating'] = secreted.apply(lambda row: str(row['Rating'] + 'C') if pandas.notna(row['CysPattern']) else row['Rating'], axis=1)
+    if 'TPM' in secreted.columns:
+        secreted['Rating'] = secreted.apply(lambda row: str(row['Rating'] + 'T') if (float(row['TPM'])>=float(args.TPMthreshold)) else row['Rating'], axis=1)
+    secreted['Rating'] = secreted.apply(lambda row: str(row['Rating'] + 'D') if pandas.notna(row['HMMERdomain']) else row['Rating'], axis=1)
+    if 'Protein_blast_ID' in secreted.columns:
+        secreted['Rating'] = secreted.apply(lambda row: str(row['Rating'] + '!') if pandas.notna(row['Protein_blast_ID']) and (row['ID_blast_toxinDB'] == "nohit" ) else row['Rating'], axis=1)
+    secreted.to_csv(name+'_secreted_ORFs.alldata', index=False,sep='\t')
+except:
+    print("An error has occurred during sequence rating")
+    sys.exit()   
+
+
 
 #================================ Backup of pipeline statistics ================================================================================================================================================
 
