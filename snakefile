@@ -317,7 +317,7 @@ rule blast_on_toxins:
                     SeqIO.write(seq, outfile, "fasta")
 
 
-#todo: finish implementation of this. 
+
 rule retrieve_candidate_toxins:
 #   Description: this rule just creates a fasta from the positive hits in the toxin similarity and structure searches. 
     input:
@@ -342,6 +342,7 @@ rule download_pfam:
 rule run_hmmer:
 #   Description: runs hmmer against the pfam database. 
     input:
+        fasta_file = rules.retrieve_candidate_toxins.output,
         pfam_db = rules.download_pfam.output.pfam_db
     output:
         tblout = config['basename'] + ".tblout",
@@ -370,7 +371,7 @@ rule parse_hmmsearch_output:
 rule run_wolfpsort:
 #   Description: runs wolfpsort on secreted peptides inferred by signalp 
     input:
-        rules.extract_secreted_peptides.output.secreted_peptides
+        rules.retrieve_candidate_toxins.output
     output:
         config['basename'] + "_secreted_wolfpsort_prediction.tsv"
     params:
@@ -408,7 +409,7 @@ if config.get("quant"): # only run this rule if the quant option is active
             """
 
 
-if config.get("blast_uniprot"):
+if config["blast_uniprot"] == True:
     rule download_uniprot:
     #   Description: downloads the uniprot fasta
         output:
@@ -433,7 +434,7 @@ if config.get("blast_uniprot"):
     rule blast_on_uniprot:
     #   Description: run blast against the uniprot database, return only the best hit
         input:
-            fasta_file = rules.cluster_peptides.output.filtered_aa_sequences,
+            fasta_file = rules.retrieve_candidate_toxins.output,
             db_file = rules.make_uniprot_blast_database.output.db_file
         output:
             blast_result = config['basename'] + "_uniprot_blast_results.tsv"
@@ -455,12 +456,14 @@ if config.get("blast_uniprot"):
 #todo: rule run_signalp: # requires some testing. 
 #todo: test with stripped sequences. This means that all sequences are preprocessed to be cut to a fixed length that would contain a signal peptide (like 50 or so). this might save memory and improve time. Moreover, we could try deduplicating these cut sequences and rereplicate afterwards to avoid predicting the same signal over and over. 
 
+outputs = [
+    rules.run_wolfpsort.output,
+    rules.parse_hmmsearch_output.output,
+]
+
+if config["blast_uniprot"] == True:
+    outputs.append(rules.blast_on_uniprot.output.blast_result)
 
 rule all: #todo: there is a bug that makes this rule run even if no split file is done. might solve by adding a checkpoint file at the end of the split rule
     input: 
-        rules.extract_secreted_peptides.output,
-        rules.blast_on_toxins.output,
-        rules.run_wolfpsort.output,
-        rules.parse_hmmsearch_output.output,
-#        split_done = "split_fasta.done",
-#        signalp_files = expand("split_sigp/{f}_summary.signalp5", f=[i.split("/")[1].split(".")[0] for i in  glob.glob("split_files/*.fasta")])
+       outputs
