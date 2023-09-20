@@ -345,6 +345,22 @@ rule parse_hmmsearch_output:
         aggregated_domains.to_csv("{output.filtered_table}", sep="\t", index=False)
 
 
+rule run_wolfpsort:
+#   Description: runs wolfpsort on secreted peptides inferred by signalp 
+    input:
+        rules.extract_secreted_peptides.output.secreted_peptides
+    output:
+        config['basename'] + "_secreted_wolfpsort_prediction.tsv"
+    params:
+        wps_path = config['wolfPsort_path']
+        awk = "awk '{print $1\"\t\"$2}'"
+    shell:
+        """
+        {params.wps_path} animal < {input} | {params.awk} > {output}
+        """
+
+
+
 
 # TODO: follow this comment for the rule that will wraps everything up and create the final table. -> Also, in my opinion these peptides should be marked with a warning flag in the output, specifying which issue affects them (e.g. “this peptide lacks a signal peptide”, “this peptide contains a transmembrane domain”, etc.)
 

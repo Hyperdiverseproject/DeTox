@@ -558,32 +558,50 @@ def parse_hmmsearch_output(domtblout_filename):
 df_dHMMER = parse_hmmsearch_output((name+'HMMER_output2_domain_table.out'))
 
 #================================ Extract and store information from final output files  ================================================================================================================================================                        
+# Import necessary libraries
+import pandas
 
-df_FinORFs = fastaToDataframe(name+'_finalORFs.fasta')                      # On recupère les Id:sequence des ORFs ainsi que leur séquence
-df_sequenceSignal = fastaToDataframe(name+'_SSeqs.fasta')            # On recupère les id:séquence des signal sequence détecter par signalP
-toxDBBlast = pandas.read_csv(name+"_finalORFs.blastsprot.out", sep="\t",names=["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"])                             # Permettra de verifier si un match avec la bdd de toxine a été identifié selon l'ID [0,1,2,3,-2]
+# Read data from fasta files and store them in dataframes
+df_FinORFs = fastaToDataframe(name+'_finalORFs.fasta')                      # Retrieve the Id:sequence of the ORFs
+df_sequenceSignal = fastaToDataframe(name+'_SSeqs.fasta')            # Retrieve the id:sequence of the signal sequences detected by signalP
+
+# Read data from blastp output file and store it in a dataframe
+toxDBBlast = pandas.read_csv(name+"_finalORFs.blastsprot.out", sep="\t",names=["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"])                             # Check if a match with the toxin database has been identified based on the ID [0,1,2,3,-2]
+
+# Calculate the number of sequence hits with blastp
 finalStat['NB sequence hit with blastp on in-house toxin Database : '] = len(toxDBBlast)                  
 
-#================================ Creation of the final file who merge information about similarity approach and structural approach  ================================================================================================================================================
-
+# Merge information from different dataframes to create the final dataframe
 df_global = pandas.merge(df_FinORFs,df_sequenceSignal,left_on="ID",right_on="ID",how='left')
 df_global = pandas.merge(df_global,df_dHMMER[["target name","query name"]],left_on="ID",right_on="target name",how='left')
 df_global = pandas.merge(df_global,toxDBBlast[["qseqid","sseqid","pident","length","evalue"]],left_on="ID",right_on="qseqid",how='left')
+
+# Rename columns in the merged dataframe
 df_global.rename(columns={'Sequence_x': 'AA_seq',"Sequence_y":"SignalSeq","query name":"HMMERdomain"}, inplace=True)
+
+# Drop unnecessary columns from the merged dataframe
 df_global = df_global.drop(["target name","qseqid"],axis=1, errors='ignore')
+
+# Remove duplicate rows from the merged dataframe
 df_global = df_global.drop_duplicates(subset=['ID'], keep='first').reset_index()
 
+# Fill missing values in the 'AA_seq' column with empty string
 df_global['AA_seq'].fillna('')
+
+# Fill missing values in the 'SignalSeq' column with empty string
 df_global['SignalSeq'] = df_global['SignalSeq'].fillna('')
 
+# Define a function to extract the mature sequence from the AA_seq and SignalSeq columns
 def extract_sequence_from_end(long_sequence, short_sequence):
     position = long_sequence.rfind(short_sequence)
     if position == -1:
         return None
     return long_sequence[position + len(short_sequence):]
 
+# Apply the extract_sequence_from_end function to create the 'MatureSeq' column
 df_global["MatureSeq"] = df_global.apply(lambda row: extract_sequence_from_end(row['AA_seq'], row['SignalSeq']), axis=1)
 
+# Save the final dataframe to a file
 df_global.to_csv(name+'_secreted_ORFs.alldata', index=False,sep='\t')
 
 #================================ Repeats Detection   ================================================================================================================================================
@@ -661,6 +679,9 @@ if args.wolfPSortPath is not None:
     secreted = pandas.merge(secreted,wolfPsortResultInTab[["ID_transcrit","wolfPSort_localization"]],left_on="shortID",right_on="ID_transcrit")
     finalStat["WoLFPSortStat"] = secreted["wolfPSort_localization"].value_counts()
     secreted.to_csv(name+'_secreted_ORFs.alldata', index=False,sep='\t')
+
+
+
 
 #================================ Blast on protein database ================================================================================================================================================
 if args.SwissProtDatabase:
