@@ -344,7 +344,6 @@ rule parse_hmmsearch_output:
         aggregated_domains['query name'] = aggregated_domains['query name'].apply(lambda x: list(set(x)))
         aggregated_domains.to_csv("{output.filtered_table}", sep="\t", index=False)
 
-
 rule run_wolfpsort:
 #   Description: runs wolfpsort on secreted peptides inferred by signalp 
     input:
@@ -360,6 +359,69 @@ rule run_wolfpsort:
         """
 
 
+
+
+### conditional rules
+
+
+if config.get("quant"): # only run this rule if the quant option is active
+    rule run_salmon:
+    #   Description: run quantification on the entire transcriptome
+        input: 
+            transcriptome = config['transcriptome'],
+            r1 = rules.trim_reads.output.r1,
+            r2 = rules.trim_reads.output.r2
+        output:
+            quant_dir = directory(config['basename'] + "_quant"),
+            quantification = config['basename'] + "_quant/quant.sf"
+        threads:
+            config['threads']
+        params:
+            index = "{input.transcriptome}.idx"
+        shell:
+            """
+            salmon index -t {input.transcriptome} -i {params.index} -p {threads}
+            salmon quant -i {params.index} -l A -1 {input.r1} -2 {input.r2} --validateMappings -o {output.quant_dir}
+            """
+
+
+if config.get("blast_uniprot"):
+    rule download_uniprot:
+    #   Description: downloads the uniprot fasta
+        output:
+            db_dir = directory("databases"),
+            database = "databases/uniprot.fasta.gz"
+        shell:
+            """
+            curl https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz -o {output.database}
+            """
+    
+    rule make_uniprot_blast_database:
+    #   Description: builds a blast database from the uniprot fasta
+        input:
+            fasta_file = rules.download_uniprot.output.database
+        output:
+            db_file = "databases/uniprot_blast_db"
+        shell:
+            """
+            makeblastdb -in {input.fasta_file} -dbtype prot -out {output.db_file}
+            """
+
+    rule blast_on_uniprot:
+    #   Description: run blast against the uniprot database, return only the best hit
+        input:
+            fasta_file = rules.cluster_peptides.output.filtered_aa_sequences,
+            db_file = rules.make_uniprot_blast_database.output.db_file
+        output:
+            blast_result = config['basename'] + "_uniprot_blast_results.tsv"
+        params:
+            evalue = config['uniprot_evalue'] if 'uniprot_evalue' in config else "1e-10"
+        threads: 
+            config['threads']
+        shell:
+            """
+            blastp -query {input.fasta_file} -evalue {params.evalue} -max_target_seqs 1 -threads {threads} -db {input.db_file} -outfmt 6 -out {output.blast_result}
+            """
 
 
 # TODO: follow this comment for the rule that will wraps everything up and create the final table. -> Also, in my opinion these peptides should be marked with a warning flag in the output, specifying which issue affects them (e.g. “this peptide lacks a signal peptide”, “this peptide contains a transmembrane domain”, etc.)
