@@ -1,6 +1,5 @@
 # DeTox pipeline
-## snakemake porting
----
+## snakemake port
 
 ## stuff to be done:
 
