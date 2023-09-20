@@ -14,4 +14,4 @@ maxlen: 450
 signalp_path: ~/signalp-5.0b/bin/
 wolfPsort_path: /WoLFPSort/bin/runWolfPsortSummary
 quant: False
-blast_uniprot: False
+blast_uniprot: True

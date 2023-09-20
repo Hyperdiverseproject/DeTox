@@ -283,29 +283,45 @@ rule build_toxin_blast_db: #todo: do we switch to diamond for max speed?
     input:
         db = config['toxin_db']
     output:
-        outfile = "{input}.nin"
-        alias = '{input.db}'
+        outfile = config['toxin_db'] + ".nin",
     shell:
         """
-        makeblastdb -dbtype prot -in {input}
+        makeblastdb -dbtype prot -in {input.db} 
         """
 
 rule blast_on_toxins:
-#   Description: runs blastp against the toxin database of all peptides. This will be used later when merging with structure-based information. Changed to a single run on the original file rather than on multiple runs to avoid redundancy and save a little IO time 
+#   Description: runs blastp against the toxin database. The query are the peptides without any signal sequence. The rule runs blast and extracts the fasta at the same time. might be split in two rules for easier management.
     input:
-        fasta_file = rules.cluster_peptides.output.filtered_aa_sequences,
-        db_file = rules.build_toxin_blast_db.output.outfile
-        blast_db_alias = rules.build_toxin_blast_db.output.alias
+        fasta_file = rules.extract_non_TM_peptides.output.non_TM_peptides,
+        db_file = rules.build_toxin_blast_db.output.outfile,
+        blast_db_alias = config['toxin_db'],
     output:
-        blast_result = "toxin_blast_results.tsv"
+        blast_result = "toxin_blast_results.tsv",
+        hits_fasta = config['basename'] + '_toxins_by_similarity.fasta'
     params:
         evalue = config['toxins_evalue'] if 'toxins_evalue' in config else "1e-10"
     threads: 
         config['threads']
-    shell:
-        """
-        blastp -query {input.fasta_file} -evalue {params.evalue} -max_target_seqs 1 -threads {threads} -db {input.blast_db_alias} -outfmt 6 -out {output.blast_result}
-        """
+    run:
+        import subprocess
+        from Bio import SeqIO
+        command_line = "blastp -query {input.fasta_file} -evalue {params.evalue} -max_target_seqs 1 -threads {threads} -db {input.blast_db_alias} -outfmt 6 -out {output.blast_result}"
+        subprocess.run(command_line, shell=True)
+        with open(str(output.blast_result)) as infile:
+            records = []
+            for line in infile:
+                records.append(line.rstrip().split("\t")[0])
+        with open(output.hits_fasta, "w") as outfile:
+            for seq in SeqIO.parse(input.fasta_file, "fasta"):
+                if seq.id in records:
+                    SeqIO.write(seq, outfile, "fasta")
+
+
+#todo: finish implementation of this. 
+rule retrieve_candidate_toxins:
+#   Description: this rule just creates a fasta from the positive hits in the toxin similarity and structure searches. 
+    input:
+        structure_based = extract_non_TM_peptides.output
 
 rule download_pfam:
 #   Description: downloads pfam database. I'd like to leave it this way as the database is fairly small and will be downloaded in parallel with slow steps. 
@@ -321,7 +337,7 @@ rule run_hmmer:
     input:
         pfam_db = rules.download_pfam.output.pfam_db
     output:
-        tblout = config['basename'] + ".tblout"
+        tblout = config['basename'] + ".tblout",
         domtblout = config['basename'] + ".domtblout"
     params:
         evalue = config['pfam_evalue'] if 'pfam_evalue' in config else "1e-5"
@@ -351,7 +367,7 @@ rule run_wolfpsort:
     output:
         config['basename'] + "_secreted_wolfpsort_prediction.tsv"
     params:
-        wps_path = config['wolfPsort_path']
+        wps_path = config['wolfPsort_path'],
         awk = "awk '{print $1\"\t\"$2}'"
     shell:
         """
@@ -436,5 +452,8 @@ if config.get("blast_uniprot"):
 rule all: #todo: there is a bug that makes this rule run even if no split file is done. might solve by adding a checkpoint file at the end of the split rule
     input: 
         rules.extract_secreted_peptides.output,
-        split_done = "split_fasta.done",
-        signalp_files = expand("split_sigp/{f}_summary.signalp5", f=[i.split("/")[1].split(".")[0] for i in  glob.glob("split_files/*.fasta")])
+        rules.blast_on_toxins.output,
+        rules.run_wolfpsort.output,
+        rules.parse_hmmsearch_output.output,
+#        split_done = "split_fasta.done",
+#        signalp_files = expand("split_sigp/{f}_summary.signalp5", f=[i.split("/")[1].split(".")[0] for i in  glob.glob("split_files/*.fasta")])
