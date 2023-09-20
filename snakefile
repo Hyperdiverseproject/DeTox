@@ -321,7 +321,14 @@ rule blast_on_toxins:
 rule retrieve_candidate_toxins:
 #   Description: this rule just creates a fasta from the positive hits in the toxin similarity and structure searches. 
     input:
-        structure_based = extract_non_TM_peptides.output
+        structure_based = rules.extract_non_TM_peptides.output.non_TM_peptides,
+        similarity_based = rules.blast_on_toxins.output.hits_fasta
+    output:
+        config["basename"] + "_candidate_toxins.fasta"
+    shell:
+        """
+        cat {input.structure_based} {input.similarity_based} > {output}
+        """
 
 rule download_pfam:
 #   Description: downloads pfam database. I'd like to leave it this way as the database is fairly small and will be downloaded in parallel with slow steps. 
