@@ -422,6 +422,43 @@ rule detect_repeated_aa:
         secreted = secreted.drop(columns=["Repeats","Repeats1","Repeats2","Repeats3"])
         secreted.to_csv("{output.repeated_aa}", index=False,sep='\t')
 
+rule extract_Cys_pattern:
+#   Description: this rule takes as an input the fasta file for the candidate toxins and the signalp output. Using the latter it separates the mature peptide, while those proteins lacking a signal peptides are considered already mature peptides. 
+    input:
+        fasta_file = rules.retrieve_candidate_toxins.output,
+        signalp_result = rules.filter_signalp_outputs.output
+    output:
+        config['basename'] + "_Cys_pattern.tsv"
+    run:
+        import pandas
+        def find_cysteine_arrangement(sequence):
+            cysteine_pattern = ""
+            continuous_c = ""
+            for aa in sequence:
+                if aa == 'C':
+                    continuous_c += 'C'
+                else:
+                    if continuous_c:
+                        cysteine_pattern += continuous_c
+                        continuous_c = ''
+                    if cysteine_pattern and cysteine_pattern[-1] != '-':
+                        cysteine_pattern += "-"
+                if continuous_c:
+                    cysteine_pattern += continuous_c
+            return cysteine_pattern if cysteine_pattern[-1] == 'C' else cysteine_pattern[:-1]
+
+        seq_df = fastaToDataframe(input.fasta_file)
+        signalp_df = pd.read_csv("{input.signalp_result}", sep='\t', names = ["ID", "signalp_prediction", "prob_signal", "prob_nosignal", "cutsite"])
+        merged_df = seq_df.merge(signalp_df, on = "ID", how = "left")
+        merged_df['mature_peptide'] = merged_df['Sequence']
+        merged_df['cut_site_position'] = merged_df['cutsite'].apply(lambda x: int(x.split(" ")[2].split("-")[-1]) if "pos:" in x else 0)
+        merged_df.loc['mature_peptide'] = merged_df.apply(lambda x: x['Sequence'][:x['cut_site_position']], axis=1)
+        merged_df['Cys_pattern'] = merged_df['mature_peptide'].apply(lambda x: find_cysteine_arrangement(x))
+        merged_df.to_csv("{output}", sep='\t', index=False)
+
+
+
+
 
 ### conditional rules
 

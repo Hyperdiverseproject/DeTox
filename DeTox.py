@@ -459,7 +459,6 @@ phobius_filter_df = phobius_filter_df[phobius_filter_df["TM"]==0]
 phobius_filter_df = phobius_filter_df.drop(["TM","SP","Prediction","SequenceID"],axis=1, errors='ignore')
 dataframe_to_fasta(phobius_filter_df, "Sequence", "ID",(name+'_finalORFs.fasta'))
 
-# TODO: siamo qua
 
 
 #================================ Similarity approach, detection of toxins from ORFs with a blastp on a toxin database ================================================================================================================================================
