@@ -4,6 +4,12 @@ def get_signalp_splits(wildcards):
     return expand('./split_files/{i}.fasta',
            i=glob_wildcards(os.path.join(checkpoint_output, '{i}.fasta')).i)
 
+def fastaToDataframe(fastaPath):
+    sequences = SeqIO.parse(open(fastaPath), 'fasta')
+    data = []
+    for record in sequences:
+        data.append({'ID': record.id, 'Sequence': str(record.seq)})
+    return pandas.DataFrame(data)
 
 
 #configfile: "config.yaml"
@@ -382,7 +388,39 @@ rule run_wolfpsort:
         {params.wps_path} animal < {input} | {params.awk} > {output}
         """
 
-
+rule detect_repeated_aa:
+#   Description: this rule looks at the fasta aminoacid sequences in input and produces a table. The table reports whether some kind of repeated pattern is found in the sequences (up to 3AA long). The default threshold for repetition is 5. The input is processed with biopython
+    input:
+        fasta_file = rules.run_wolfpsort.output,
+    output:
+        repeated_aa = config['basename'] + "_repeated_aa.tsv"
+    params:
+        threshold = config['repeated_aa_threshold'] if 'repeated_aa_threshold' in config else 5
+    run:
+        import itertools
+        from Bio import SeqIO
+        import pandas
+        def findRepetition(size,seq):
+            repetition=[]
+            for cdl in range(0,size):
+                sub = [seq[i:i+size] for i in range(cdl, len(seq), size)]
+                groups = itertools.groupby(sub)
+                result = [(label, sum(1 for _ in group)) for label, group in groups]
+                for elem, nbRep in result:
+                    if int(nbRep) >=int("{params.threshold}"):
+                    repetition.append((elem,nbRep))
+            return repetition
+        secreted = fastaToDataframe(input.fasta_file)
+        secreted["Repeats1"] = secreted.apply(lambda x: findRepetition(1,x["Sequence"]),axis=1)
+        secreted["Repeats2"] = secreted.apply(lambda x: findRepetition(2,x["Sequence"]),axis=1)
+        secreted["Repeats3"] = secreted.apply(lambda x: findRepetition(3,x["Sequence"]),axis=1)
+        secreted["Repeats"] = secreted["Repeats1"] + secreted["Repeats2"] + secreted["Repeats3"]
+        secreted['RepeatsTypes'] = secreted['Repeats'].apply(lambda t: [n for (n, _) in t])
+        secreted['RepeatsLengths'] = secreted['Repeats'].apply(lambda t: [n for (_, n) in t])
+        secreted['RepeatsLengths'] = [','.join(map(str, l)) for l in secreted['RepeatsLengths']]
+        secreted['RepeatsTypes'] = [','.join(map(str, l)) for l in secreted['RepeatsTypes']]
+        secreted = secreted.drop(columns=["Repeats","Repeats1","Repeats2","Repeats3"])
+        secreted.to_csv("{output.repeated_aa}", index=False,sep='\t')
 
 
 ### conditional rules
