@@ -455,7 +455,7 @@ rule extract_Cys_pattern:
         merged_df = seq_df.merge(signalp_df, on = "ID", how = "left")
         merged_df['mature_peptide'] = merged_df['Sequence']
         merged_df['cut_site_position'] = merged_df['cutsite'].apply(lambda x: int(x.split(" ")[2].split("-")[-1][:-1]) if "pos:" in x else 0)
-        merged_df['mature_peptide'] = merged_df.apply(lambda x: x['Sequence'][:x['cut_site_position']], axis=1)
+        merged_df['mature_peptide'] = merged_df.apply(lambda x: x['Sequence'][x['cut_site_position']:], axis=1)
         merged_df['Cys_pattern'] = merged_df['mature_peptide'].apply(lambda x: get_cys_pattern(x))
         merged_df.to_csv(f"{output}", sep='\t', index=False)
 
