@@ -1,5 +1,7 @@
 from Bio import SeqIO
 import pandas 
+import glob
+
 def get_signalp_splits(wildcards):
     import os
     checkpoint_output = checkpoints.split_fasta.get(**wildcards).output[0]
@@ -128,11 +130,11 @@ rule cluster_peptides:
     input:
         aa_sequences = rules.detect_orfs.output.aa_sequences
     output:
-        filtered_aa_sequences = config['basename'] + ".filtered.faa" #todo might want to change the basename to a param also in the other cd-hit rule if we decide on keeping it
+        filtered_aa_sequences = config['basename'] + ".clustered.faa"
     params:
         threshold = config['clustering_threshold'], #todo : we might want to use separate thresholds if we're going to run cd-hit on transcripts and peptides
         memory = str(int(config['memory'])*1000),
-        basename = config['basename'] + ".filtered"
+        basename = config['basename'] + ".clustered"
     threads: config['threads']
     shell:
         """
@@ -159,8 +161,7 @@ checkpoint split_fasta:
     input:
         fasta_file = rules.trim_peptides.output.trimmed_sequences
     output:
-        split_dir = directory("split_files"),
-        marker = "split_fasta.done"
+        split_dir = directory("split_files")
     params:
         chunk_size = 9000 # using 9000 instead of 50000 for usability in normal desktop/laptop pcs. May be user defined.
     run:
@@ -197,35 +198,31 @@ checkpoint split_fasta:
             handle = open(output_file, "w")
             SeqIO.write(batch, handle, "fasta")
             handle.close()
-        with open(output.marker, "w") as f: # touches the file. Might come useful for storing information later
-            f.write('')
 
-import glob
+def aggregate_splits(wildcards):
+    checkpoint_output = checkpoints.split_fasta.get(**wildcards).output[0]
+    return expand("split_files/{i}_summary.signalp5",
+        i=glob_wildcards(os.path.join(checkpoint_output, "{i}.fasta")).i)
 
-def get_fasta_splits(wildcards):
-    chkpt_output = checkpoints.split_fasta.get(**wildcards).output[0]
-    return glob.glob(f"{chkpt_output}/*.fasta")
 
 rule run_signalp:
     input: 
-        fasta_file = "split_files/{file_id}.fasta",
-        marker = "split_fasta.done"
+        fasta_file = "split_files/{i}.fasta",
     output:
-        outfile = "split_sigp/{file_id}_summary.signalp5"
+        outfile = "split_fasta/{i}_summary.signalp5"
     params:
-        prefix = "split_sigp/{file_id}"
+        prefix = "split_fasta/{i}"
     shell:
         """
-        mkdir -p split_sigp
         signalp -batch 5000 -fasta {input.fasta_file} -org euk -format short -verbose -prefix {params.prefix}
         """
 
 rule filter_signalp_outputs:
 #   Description: this rule filters the output of the multiple signalp runs and extracts only those with a probability of signal peptide greater than a threshold. Only one file should be produced from the multiple signalp files. Two outputs are expected: a filtered (or not?) table with the signalp results and a filtered fasta of only those peptides with a signal
     input:
-        files = expand("{file_id}", file_id = glob.glob("split_sigp/*.signalp5"))
+        files = aggregate_splits
     output:
-        "filtered_sigp.tsv"
+        config["basename"] + "_filtered_sigp.tsv"
     params:
         threshold = 0.8 # todo: user defined
     shell:
@@ -238,8 +235,8 @@ rule extract_secreted_peptides:
         signalp_result = rules.filter_signalp_outputs.output,
         fasta_file = rules.cluster_peptides.output.filtered_aa_sequences
     output:
-        secreted_peptides = "secreted_peptides.fasta",
-        non_secreted_peptides = "non_secreted_peptides.fasta"
+        secreted_peptides = config['basename'] + "_secreted_peptides.fasta",
+        non_secreted_peptides = config['basename'] + "_non_secreted_peptides.fasta"
     run:
         from Bio import SeqIO
         with open(str(input.signalp_result)) as infile:
@@ -261,7 +258,7 @@ rule run_phobius: #todo: remember to inform the user about the installation proc
     input: 
         rules.extract_secreted_peptides.output.secreted_peptides
     output:
-        table = "phobius_predictions.tsv"
+        table = config['basename'] + "_phobius_predictions.tsv"
     shell:
         """
         phobius.pl -short {input} | sed 's/\s\+/\t/g' | awk '$2 == 0' > {output.table}
@@ -273,7 +270,7 @@ rule extract_non_TM_peptides:
         phobius_result = rules.run_phobius.output.table,
         fasta_file = rules.extract_secreted_peptides.output.secreted_peptides
     output:
-        non_TM_peptides = "non_TM_peptides.fasta"
+        non_TM_peptides = config['basename'] + "non_TM_peptides.fasta"
     run:
         from Bio import SeqIO
         with open(str(input.phobius_result)) as infile:
@@ -504,9 +501,11 @@ if config["blast_uniprot"] == True:
             fasta_file = rules.download_uniprot.output.database
         output:
             db_file = "databases/uniprot_blast_db.pin"
+        params:
+            alias = "databases/uniprot_blast_db"
         shell:
             """
-            gunzip -c {input.fasta_file} | makeblastdb -in - -dbtype prot -out {output.db_file.split(".")[0]} -title {output.db_file.split(".")[0]}
+            gunzip -c {input.fasta_file} | makeblastdb -in - -dbtype prot -out {params.alias} -title {params.alias}
             """
 
     rule blast_on_uniprot:
