@@ -408,7 +408,7 @@ rule detect_repeated_aa:
                 result = [(label, sum(1 for _ in group)) for label, group in groups]
                 for elem, nbRep in result:
                     if int(nbRep) >=int("{params.threshold}"):
-                    repetition.append((elem,nbRep))
+                        repetition.append((elem,nbRep))
             return repetition
         secreted = fastaToDataframe(input.fasta_file)
         secreted["Repeats1"] = secreted.apply(lambda x: findRepetition(1,x["Sequence"]),axis=1)
@@ -526,19 +526,35 @@ if config["blast_uniprot"] == True:
 # TODO: follow this comment for the rule that will wraps everything up and create the final table. -> Also, in my opinion these peptides should be marked with a warning flag in the output, specifying which issue affects them (e.g. “this peptide lacks a signal peptide”, “this peptide contains a transmembrane domain”, etc.)
 
 
+
 #todo: try to run signalp during the split rule to avoid problems. issue: if the process is interrupted abnormally during the run the rule is almost certain to misbehave and rerun the whole thing
 
-#todo: rule run_signalp: # requires some testing. 
-#todo: test with stripped sequences. This means that all sequences are preprocessed to be cut to a fixed length that would contain a signal peptide (like 50 or so). this might save memory and improve time. Moreover, we could try deduplicating these cut sequences and rereplicate afterwards to avoid predicting the same signal over and over. 
-
+# this is the list with all the expected output to be put in the final table, will be filled depending on the configuration file. 
 outputs = [
     rules.run_wolfpsort.output,
     rules.parse_hmmsearch_output.output,
+    rules.blast_on_toxins.output.blast_result,
+    rules.blast_on_uniprot.output.blast_result,
+    rules.detect_repeated_aa.output.repeated_aa,
+
 ]
+
+rule build_output_table:
+    input:
+        base = rules.extract_Cys_pattern.output,
+        extra = outputs
+    output:
+        config['basename'] + "_toxins.tsv"
+    run:
+        import pandas as pd 
+        df = pd.read_csv("{input.base}", sep='\t')
+        for i in outputs:
+            df = df.merge(i, on = "ID", how = "left", left_on = 0, right_on = 0)
+        df.to_csv("{output}", sep='\t', index=False)
 
 if config["blast_uniprot"] == True:
     outputs.append(rules.blast_on_uniprot.output.blast_result)
 
 rule all: #todo: there is a bug that makes this rule run even if no split file is done. might solve by adding a checkpoint file at the end of the split rule
     input: 
-       outputs
+       rules.build_output_table.output
