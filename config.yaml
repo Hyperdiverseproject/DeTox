@@ -12,6 +12,6 @@ contamination_evalue: "1e-5"
 clustering_threshold: "0.9"
 maxlen: 450
 signalp_path: ~/signalp-5.0b/bin/
-wolfPsort_path: /WoLFPSort/bin/runWolfPsortSummary
+wolfPsort_path: ~/WoLFPSort/bin/runWolfPsortSummary
 quant: False
 blast_uniprot: True

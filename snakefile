@@ -1,3 +1,5 @@
+from Bio import SeqIO
+import pandas 
 def get_signalp_splits(wildcards):
     import os
     checkpoint_output = checkpoints.split_fasta.get(**wildcards).output[0]
@@ -262,7 +264,7 @@ rule run_phobius: #todo: remember to inform the user about the installation proc
         table = "phobius_predictions.tsv"
     shell:
         """
-        phobius -short {input} | sed 's/\s\+/\t/g' | awk '$2 == 0' > {output.table}
+        phobius.pl -short {input} | sed 's/\s\+/\t/g' | awk '$2 == 0' > {output.table}
         """
 
 rule extract_non_TM_peptides:
@@ -289,7 +291,7 @@ rule build_toxin_blast_db: #todo: do we switch to diamond for max speed?
     input:
         db = config['toxin_db']
     output:
-        outfile = config['toxin_db'] + ".nin",
+        outfile = config['toxin_db'] + ".pin",
     shell:
         """
         makeblastdb -dbtype prot -in {input.db} 
@@ -311,7 +313,8 @@ rule blast_on_toxins:
     run:
         import subprocess
         from Bio import SeqIO
-        command_line = "blastp -query {input.fasta_file} -evalue {params.evalue} -max_target_seqs 1 -threads {threads} -db {input.blast_db_alias} -outfmt 6 -out {output.blast_result}"
+        command_line = f"blastp -query {input.fasta_file} -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads} -db {input.blast_db_alias} -outfmt 6 -out {output.blast_result}"
+        print(command_line)
         subprocess.run(command_line, shell=True)
         with open(str(output.blast_result)) as infile:
             records = []
@@ -369,10 +372,11 @@ rule parse_hmmsearch_output:
     output:
         filtered_table = config['basename'] + ".domtblout.tsv"
     run:
-        df_domtblout = pandas.read_csv("{input.domtblout}", comment="#", delim_whitespace=True, names=["target name","accession_t","tlen","query name","accession_Q","qlen","E-value","score_1","bias_1","#","of","c-Evalue","i-Evalue","score_2","bias_2","from_1","to_1","from_2","to_2","from_3","to_3","acc","description of target"])
+        import pandas
+        df_domtblout = pandas.read_csv(f"{input.domtblout}", comment="#", delim_whitespace=True, usecols = [0,1,2,3,4] , names=["target name","accession_t","tlen","query name","accession_Q"])
         aggregated_domains = df_domtblout.groupby('target name')['query name'].apply(list).reset_index()
         aggregated_domains['query name'] = aggregated_domains['query name'].apply(lambda x: list(set(x)))
-        aggregated_domains.to_csv("{output.filtered_table}", sep="\t", index=False)
+        aggregated_domains.to_csv(f"{output.filtered_table}", sep="\t", index=False)
 
 rule run_wolfpsort:
 #   Description: runs wolfpsort on secreted peptides inferred by signalp 
@@ -391,7 +395,7 @@ rule run_wolfpsort:
 rule detect_repeated_aa:
 #   Description: this rule looks at the fasta aminoacid sequences in input and produces a table. The table reports whether some kind of repeated pattern is found in the sequences (up to 3AA long). The default threshold for repetition is 5. The input is processed with biopython
     input:
-        fasta_file = rules.run_wolfpsort.output,
+        fasta_file = rules.retrieve_candidate_toxins.output,
     output:
         repeated_aa = config['basename'] + "_repeated_aa.tsv"
     params:
@@ -407,10 +411,10 @@ rule detect_repeated_aa:
                 groups = itertools.groupby(sub)
                 result = [(label, sum(1 for _ in group)) for label, group in groups]
                 for elem, nbRep in result:
-                    if int(nbRep) >=int("{params.threshold}"):
+                    if int(nbRep) >=int(f"{params.threshold}"):
                         repetition.append((elem,nbRep))
             return repetition
-        secreted = fastaToDataframe(input.fasta_file)
+        secreted = fastaToDataframe(f"{input.fasta_file}")
         secreted["Repeats1"] = secreted.apply(lambda x: findRepetition(1,x["Sequence"]),axis=1)
         secreted["Repeats2"] = secreted.apply(lambda x: findRepetition(2,x["Sequence"]),axis=1)
         secreted["Repeats3"] = secreted.apply(lambda x: findRepetition(3,x["Sequence"]),axis=1)
@@ -420,7 +424,7 @@ rule detect_repeated_aa:
         secreted['RepeatsLengths'] = [','.join(map(str, l)) for l in secreted['RepeatsLengths']]
         secreted['RepeatsTypes'] = [','.join(map(str, l)) for l in secreted['RepeatsTypes']]
         secreted = secreted.drop(columns=["Repeats","Repeats1","Repeats2","Repeats3"])
-        secreted.to_csv("{output.repeated_aa}", index=False,sep='\t')
+        secreted.to_csv(f"{output.repeated_aa}", index=False,sep='\t')
 
 rule extract_Cys_pattern:
 #   Description: this rule takes as an input the fasta file for the candidate toxins and the signalp output. Using the latter it separates the mature peptide, while those proteins lacking a signal peptides are considered already mature peptides. 
@@ -430,31 +434,30 @@ rule extract_Cys_pattern:
     output:
         config['basename'] + "_Cys_pattern.tsv"
     run:
-        import pandas
-        def find_cysteine_arrangement(sequence):
-            cysteine_pattern = ""
-            continuous_c = ""
-            for aa in sequence:
-                if aa == 'C':
-                    continuous_c += 'C'
-                else:
-                    if continuous_c:
-                        cysteine_pattern += continuous_c
-                        continuous_c = ''
-                    if cysteine_pattern and cysteine_pattern[-1] != '-':
-                        cysteine_pattern += "-"
-                if continuous_c:
-                    cysteine_pattern += continuous_c
-            return cysteine_pattern if cysteine_pattern[-1] == 'C' else cysteine_pattern[:-1]
-
-        seq_df = fastaToDataframe(input.fasta_file)
-        signalp_df = pd.read_csv("{input.signalp_result}", sep='\t', names = ["ID", "signalp_prediction", "prob_signal", "prob_nosignal", "cutsite"])
+        from Bio import SeqIO
+        def get_cys_pattern(seq):
+            pattern = ""
+            status = False
+            if not pandas.isna(seq) and seq.count('C') >= 4:
+                for char in seq:
+                    if char == "C":
+                        pattern = pattern + "C"
+                        status = True
+                    else:
+                        if status:
+                            pattern = pattern + "-"
+                            status = False
+                if(pattern[-1] == "-"):
+                    pattern = pattern[0:-1]
+            return pattern
+        seq_df = fastaToDataframe(f"{input.fasta_file}")
+        signalp_df = pandas.read_csv(f"{input.signalp_result}", sep='\t', names = ["ID", "signalp_prediction", "prob_signal", "prob_nosignal", "cutsite"])
         merged_df = seq_df.merge(signalp_df, on = "ID", how = "left")
         merged_df['mature_peptide'] = merged_df['Sequence']
-        merged_df['cut_site_position'] = merged_df['cutsite'].apply(lambda x: int(x.split(" ")[2].split("-")[-1]) if "pos:" in x else 0)
-        merged_df.loc['mature_peptide'] = merged_df.apply(lambda x: x['Sequence'][:x['cut_site_position']], axis=1)
-        merged_df['Cys_pattern'] = merged_df['mature_peptide'].apply(lambda x: find_cysteine_arrangement(x))
-        merged_df.to_csv("{output}", sep='\t', index=False)
+        merged_df['cut_site_position'] = merged_df['cutsite'].apply(lambda x: int(x.split(" ")[2].split("-")[-1][:-1]) if "pos:" in x else 0)
+        merged_df['mature_peptide'] = merged_df.apply(lambda x: x['Sequence'][:x['cut_site_position']], axis=1)
+        merged_df['Cys_pattern'] = merged_df['mature_peptide'].apply(lambda x: get_cys_pattern(x))
+        merged_df.to_csv(f"{output}", sep='\t', index=False)
 
 
 
@@ -500,10 +503,10 @@ if config["blast_uniprot"] == True:
         input:
             fasta_file = rules.download_uniprot.output.database
         output:
-            db_file = "databases/uniprot_blast_db"
+            db_file = "databases/uniprot_blast_db.pin"
         shell:
             """
-            makeblastdb -in {input.fasta_file} -dbtype prot -out {output.db_file}
+            gunzip -c {input.fasta_file} | makeblastdb -in - -dbtype prot -out {output.db_file.split(".")[0]} -title {output.db_file.split(".")[0]}
             """
 
     rule blast_on_uniprot:
@@ -514,12 +517,14 @@ if config["blast_uniprot"] == True:
         output:
             blast_result = config['basename'] + "_uniprot_blast_results.tsv"
         params:
-            evalue = config['uniprot_evalue'] if 'uniprot_evalue' in config else "1e-10"
+            evalue = config['uniprot_evalue'] if 'uniprot_evalue' in config else "1e-10",
+            alias = rules.make_uniprot_blast_database.output.db_file.split(".")[0]
         threads: 
             config['threads']
         shell:
             """
-            blastp -query {input.fasta_file} -evalue {params.evalue} -max_target_seqs 1 -threads {threads} -db {input.db_file} -outfmt 6 -out {output.blast_result}
+            echo "qseqid\tsseqid\tpident\tevalue" > {output.blast_result}
+            blastp -query {input.fasta_file} -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads} -db {params.alias} -outfmt "6 qseqid sseqid pident evalue" >> {output.blast_result}
             """
 
 
@@ -536,7 +541,6 @@ outputs = [
     rules.blast_on_toxins.output.blast_result,
     rules.blast_on_uniprot.output.blast_result,
     rules.detect_repeated_aa.output.repeated_aa,
-
 ]
 
 rule build_output_table:
@@ -546,11 +550,19 @@ rule build_output_table:
     output:
         config['basename'] + "_toxins.tsv"
     run:
-        import pandas as pd 
-        df = pd.read_csv("{input.base}", sep='\t')
+        df = pandas.read_csv(f"{input.base}", sep='\t')
         for i in outputs:
-            df = df.merge(i, on = "ID", how = "left", left_on = 0, right_on = 0)
-        df.to_csv("{output}", sep='\t', index=False)
+            print(i)
+            dfi = pandas.read_csv(str(i), sep = "\t")
+            print(dfi)
+            if "Sequence" in dfi.columns:
+                dfi = dfi.drop(columns=["Sequence"])
+            newcols = [i for i in dfi.columns]
+            newcols[0] = "ID"
+            dfi.columns = newcols
+            print (dfi)
+            df = df.merge(dfi, how = "left", on = "ID")
+        df.drop_duplicates().to_csv(f"{output}", sep='\t', index=False)
 
 if config["blast_uniprot"] == True:
     outputs.append(rules.blast_on_uniprot.output.blast_result)

@@ -6,7 +6,7 @@
 - [x] port C pattern recognition
   - [x] split mature peptides
 - [x] port repetitive patterns flagging
-- [ ] port merging of all results in a single table
+- [x] port merging of all results in a single table
 - [ ] port scoring
 
 
