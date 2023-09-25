@@ -20,3 +20,4 @@ dependencies:
   - orfipy
   - phobius
   - pandas
+  - seqkit

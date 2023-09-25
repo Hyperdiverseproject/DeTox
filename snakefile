@@ -164,58 +164,31 @@ checkpoint split_fasta:
         split_dir = directory("split_files")
     params:
         chunk_size = 9000 # using 9000 instead of 50000 for usability in normal desktop/laptop pcs. May be user defined.
-    run:
-        from Bio import SeqIO
-        import os
-        def batch_iterator(iterator, batch_size):
-            """Returns lists of length batch_size.
+    shell:
+        """
+        mkdir -p split_files && seqkit split2 -s {params.chunk_size} -O {output} --by-size-prefix ""  -j 8 {input.fasta_file}
+        """
 
-            This is a generator function, and it returns lists of the
-            entries from the supplied iterator.  Each list will have
-            batch_size entries, although the final list may be shorter.
-            
-            src: https://biopython.org/wiki/Split_large_file
-            """
-            entry = True  # Make sure we loop once
-            while entry:
-                batch = []
-                while len(batch) < batch_size:
-                    try:
-                        entry = next(iterator)
-                    except StopIteration:
-                        entry = None
-                    if entry is None:
-                        break
-                    batch.append(entry)
-                if batch:
-                    yield batch
-        # Open the large fasta file and use batch_iterator to split the file into batches of params.chunk_size sequences.
-        os.makedirs(output.split_dir, exist_ok=True)
-        record_iter = SeqIO.parse(open(input.fasta_file), "fasta")
-        for i, batch in enumerate(batch_iterator(record_iter, params.chunk_size)):
-            # Write the current batch to a split fasta file.
-            output_file = f"{output.split_dir}/{i + 1}.fasta"
-            handle = open(output_file, "w")
-            SeqIO.write(batch, handle, "fasta")
-            handle.close()
-
-def aggregate_splits(wildcards):
-    checkpoint_output = checkpoints.split_fasta.get(**wildcards).output[0]
-    return expand("split_files/{i}_summary.signalp5",
-        i=glob_wildcards(os.path.join(checkpoint_output, "{i}.fasta")).i)
 
 
 rule run_signalp:
     input: 
-        fasta_file = "split_files/{i}.fasta",
+        fasta_file = "split_files/{i}.faa",
     output:
-        outfile = "split_fasta/{i}_summary.signalp5"
+        outfile = "split_files/{i}_summary.signalp5"
     params:
-        prefix = "split_fasta/{i}"
+        prefix = "split_files/{i}"
     shell:
         """
         signalp -batch 5000 -fasta {input.fasta_file} -org euk -format short -verbose -prefix {params.prefix}
         """
+
+
+def aggregate_splits(wildcards):
+    checkpoint_output = checkpoints.split_fasta.get(**wildcards).output[0]
+    return expand("split_files/{i}_summary.signalp5",
+        i=glob_wildcards(os.path.join(checkpoint_output, "{i}.faa")).i)
+
 
 rule filter_signalp_outputs:
 #   Description: this rule filters the output of the multiple signalp runs and extracts only those with a probability of signal peptide greater than a threshold. Only one file should be produced from the multiple signalp files. Two outputs are expected: a filtered (or not?) table with the signalp results and a filtered fasta of only those peptides with a signal
