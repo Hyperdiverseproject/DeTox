@@ -164,9 +164,11 @@ checkpoint split_fasta:
         split_dir = directory("split_files")
     params:
         chunk_size = 9000 # using 9000 instead of 50000 for usability in normal desktop/laptop pcs. May be user defined.
+    threads:
+        config['threads']
     shell:
         """
-        mkdir -p split_files && seqkit split2 -s {params.chunk_size} -O {output} --by-size-prefix ""  -j 8 {input.fasta_file}
+        mkdir -p split_files && seqkit split2 -s {params.chunk_size} -O {output} --by-size-prefix ""  -j {threads} {input.fasta_file}
         """
 
 
