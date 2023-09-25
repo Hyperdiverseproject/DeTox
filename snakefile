@@ -163,7 +163,7 @@ checkpoint split_fasta:
     output:
         split_dir = directory("split_files")
     params:
-        chunk_size = 9000 # using 9000 instead of 50000 for usability in normal desktop/laptop pcs. May be user defined.
+        chunk_size = 5000 # using 9000 instead of 50000 for usability in normal desktop/laptop pcs. May be user defined.
     threads:
         config['threads']
     shell:
@@ -202,7 +202,7 @@ rule filter_signalp_outputs:
         threshold = 0.8 # todo: user defined
     shell:
         """
-        cat {input.files} | sed '/^#/d' | awk '$3 > {params.threshold}' > {output}
+        cat {input.files} | sed '/^#/d' | grep -v "?" | awk '$3 > {params.threshold}' > {output}
         """
 
 rule extract_secreted_peptides:
@@ -285,7 +285,8 @@ rule blast_on_toxins:
     run:
         import subprocess
         from Bio import SeqIO
-        command_line = f"blastp -query {input.fasta_file} -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads} -db {input.blast_db_alias} -outfmt 6 -out {output.blast_result}"
+        build_header = f"echo \"qseqid\ttoxinDB_sseqid\ttoxinDB_pident\ttoxinDB_evalue\" > {output.blast_result}"
+        command_line = f"{build_header} && blastp -query {input.fasta_file} -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads} -db {input.blast_db_alias} -outfmt '6 qseqid sseqid pident evalue' >> {output.blast_result}"
         print(command_line)
         subprocess.run(command_line, shell=True)
         with open(str(output.blast_result)) as infile:
@@ -347,7 +348,7 @@ rule parse_hmmsearch_output:
         import pandas
         df_domtblout = pandas.read_csv(f"{input.domtblout}", comment="#", delim_whitespace=True, usecols = [0,1,2,3,4] , names=["target name","accession_t","tlen","query name","accession_Q"])
         aggregated_domains = df_domtblout.groupby('target name')['query name'].apply(list).reset_index()
-        aggregated_domains['query name'] = aggregated_domains['query name'].apply(lambda x: list(set(x)))
+        aggregated_domains['pfam domains'] = aggregated_domains['query name'].apply(lambda x: "; ".join(list(set(x))))
         aggregated_domains.to_csv(f"{output.filtered_table}", sep="\t", index=False)
 
 rule run_wolfpsort:
@@ -425,7 +426,6 @@ rule extract_Cys_pattern:
         seq_df = fastaToDataframe(f"{input.fasta_file}")
         signalp_df = pandas.read_csv(f"{input.signalp_result}", sep='\t', names = ["ID", "signalp_prediction", "prob_signal", "prob_nosignal", "cutsite"])
         merged_df = seq_df.merge(signalp_df, on = "ID", how = "left")
-        merged_df['mature_peptide'] = merged_df['Sequence']
         merged_df['cut_site_position'] = merged_df['cutsite'].apply(lambda x: int(x.split(" ")[2].split("-")[-1][:-1]) if "pos:" in x else 0)
         merged_df['mature_peptide'] = merged_df.apply(lambda x: x['Sequence'][x['cut_site_position']:], axis=1)
         merged_df['Cys_pattern'] = merged_df['mature_peptide'].apply(lambda x: get_cys_pattern(x))
@@ -497,7 +497,7 @@ if config["blast_uniprot"] == True:
             config['threads']
         shell:
             """
-            echo "qseqid\tsseqid\tpident\tevalue" > {output.blast_result}
+            echo "qseqid\tuniprot_sseqid\tuniprot_pident\tuniprot_evalue" > {output.blast_result}
             blastp -query {input.fasta_file} -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads} -db {params.alias} -outfmt "6 qseqid sseqid pident evalue" >> {output.blast_result}
             """
 
@@ -538,9 +538,9 @@ rule build_output_table:
             df = df.merge(dfi, how = "left", on = "ID")
         df.drop_duplicates().to_csv(f"{output}", sep='\t', index=False)
 
-if config["blast_uniprot"] == True:
-    outputs.append(rules.blast_on_uniprot.output.blast_result)
+#if config["blast_uniprot"] == True:
+#    outputs.append(rules.blast_on_uniprot.output.blast_result)
 
-rule all: #todo: there is a bug that makes this rule run even if no split file is done. might solve by adding a checkpoint file at the end of the split rule
+rule all:
     input: 
        rules.build_output_table.output
