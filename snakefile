@@ -272,7 +272,7 @@ rule build_toxin_blast_db: #todo: do we switch to diamond for max speed?
 rule blast_on_toxins:
 #   Description: runs blastp against the toxin database. The query are the peptides without any signal sequence. The rule runs blast and extracts the fasta at the same time. might be split in two rules for easier management.
     input:
-        fasta_file = rules.extract_non_TM_peptides.output.non_TM_peptides,
+        fasta_file = rules.extract_secreted_peptides.output.non_secreted_peptides,
         db_file = rules.build_toxin_blast_db.output.outfile,
         blast_db_alias = config['toxin_db'],
     output:
@@ -517,7 +517,11 @@ outputs = [
     rules.detect_repeated_aa.output.repeated_aa,
 ]
 
+
+
 rule build_output_table:
+#   Description: this rule merges the tabular output of the other rules and merges it in a single table. It uses the outputs list defined above.
+#   todo: add the scoring system here. 
     input:
         base = rules.extract_Cys_pattern.output,
         extra = outputs
@@ -537,9 +541,6 @@ rule build_output_table:
             print (dfi)
             df = df.merge(dfi, how = "left", on = "ID")
         df.drop_duplicates().to_csv(f"{output}", sep='\t', index=False)
-
-#if config["blast_uniprot"] == True:
-#    outputs.append(rules.blast_on_uniprot.output.blast_result)
 
 rule all:
     input: 
