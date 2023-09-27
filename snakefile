@@ -263,10 +263,10 @@ rule build_toxin_blast_db: #todo: do we switch to diamond for max speed?
     input:
         db = config['toxin_db']
     output:
-        outfile = config['toxin_db'] + ".pin",
+        outfile = config['toxin_db'] + ".dmnd",
     shell:
         """
-        makeblastdb -dbtype prot -in {input.db} 
+        diamond makedb --db {output.outfile} --in {input.db} 
         """
 
 rule blast_on_toxins:
@@ -275,7 +275,6 @@ rule blast_on_toxins:
         nonsec_fasta_file = rules.extract_secreted_peptides.output.non_secreted_peptides,
         sec_fasta_file = rules.extract_non_TM_peptides.output.non_TM_peptides,
         db_file = rules.build_toxin_blast_db.output.outfile,
-        blast_db_alias = config['toxin_db'],
     output:
         blast_result = config['basename'] + "_toxin_blast_results.tsv",
         hits_fasta = config['basename'] + '_toxins_by_similarity.fasta'
@@ -287,7 +286,7 @@ rule blast_on_toxins:
         import subprocess
         from Bio import SeqIO
         build_header = f"echo \"qseqid\ttoxinDB_sseqid\ttoxinDB_pident\ttoxinDB_evalue\" > {output.blast_result}"
-        command_line = f"{build_header} && blastp -query {input.nonsec_fasta_file} -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads} -db {input.blast_db_alias} -outfmt '6 qseqid sseqid pident evalue' >> {output.blast_result}"
+        command_line = f"{build_header} && diamond blastp -q {input.nonsec_fasta_file} --evalue {params.evalue} --max-target-seqs 1 --threads {threads} -d {input.db_file} --outfmt 6 qseqid sseqid pident evalue >> {output.blast_result}"
         print(command_line)
         subprocess.run(command_line, shell=True)
         with open(str(output.blast_result)) as infile:
@@ -298,7 +297,7 @@ rule blast_on_toxins:
             for seq in SeqIO.parse(input.nonsec_fasta_file, "fasta"):
                 if seq.id in records:
                     SeqIO.write(seq, outfile, "fasta")
-        command_line = f"{build_header} && blastp -query {input.sec_fasta_file} -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads} -db {input.blast_db_alias} -outfmt '6 qseqid sseqid pident evalue' >> {output.blast_result}"
+        command_line = f"{build_header} && diamond blastp -q {input.nonsec_fasta_file} --evalue {params.evalue} --max-target-seqs 1 --threads {threads} -d {input.db_file} --outfmt 6 qseqid sseqid pident evalue >> {output.blast_result}"
         print(command_line)
         subprocess.run(command_line, shell=True)
         
