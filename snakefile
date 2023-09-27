@@ -290,7 +290,7 @@ rule blast_on_toxins:
         command_line = f"{build_header} && blastp -query {input.nonsec_fasta_file} -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads} -db {input.blast_db_alias} -outfmt '6 qseqid sseqid pident evalue' >> {output.blast_result}"
         print(command_line)
         subprocess.run(command_line, shell=True)
-        with open(str(output.nonsec_blast_result)) as infile:
+        with open(str(output.blast_result)) as infile:
             records = []
             for line in infile:
                 records.append(line.rstrip().split("\t")[0])
@@ -501,7 +501,7 @@ if config["blast_uniprot"] == True:
         shell:
             """
             echo "qseqid\tuniprot_sseqid\tuniprot_pident\tuniprot_evalue" > {output.blast_result}
-            diamond blastp -d {input.dbfile} -q {input.fasta_file} --outfmt 6 qseqid sseqid pident evalue --max_target_seqs 1 --threads {threads} >> {output.blast_result}
+            diamond blastp -d {input.db_file} -q {input.fasta_file} --outfmt 6 qseqid sseqid pident evalue --max-target-seqs 1 --threads {threads} >> {output.blast_result}
             """
 
 
@@ -545,7 +545,6 @@ rule build_output_table:
             df = df.merge(dfi, how = "left", on = "ID")
         #todo: add scoring system here
         try:
-            df = pandas.read_csv(name+'_df_ORFs.alldata',delimiter="\t")
             df = df.assign(Rating='')
             df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'S') if pandas.notna(row['signalp_prediction']) else str(row['Rating'] + '*'), axis=1)
             df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'B') if (row['toxinDB_sseqid'] != "nohit" ) else row['Rating'], axis=1)
@@ -556,8 +555,8 @@ rule build_output_table:
             df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'D') if pandas.notna(row['pfam domains']) else row['Rating'], axis=1)
             if 'uniprot_sseqid' in df.columns:
                 df['Rating'] = df.apply(lambda row: str(row['Rating'] + '!') if pandas.notna(row['uniprot_sseqid']) and (row['toxinDB_sseqid'] == "nohit" ) else row['Rating'], axis=1)
-        except:
-            print("An error has occurred during sequence rating")
+        except Exception as e:
+            print(f"An error has occurred during sequence rating: {e}")
             sys.exit()  
         df.drop_duplicates().to_csv(f"{output}", sep='\t', index=False)
 
