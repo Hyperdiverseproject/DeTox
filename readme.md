@@ -1,31 +1,65 @@
 # DeTox pipeline
 
-## install
-+ clone this repository
-+ switch to snakemake_port branch
-  + `git switch snakemake_port` or `git checkout snakemake_port`
-+ create the conda environment (here i use mamba for faster setup)
-  + `mamba env create -f toxo_env.yml && mamba activate DeToX`
-+ install licensed software
-  + **signalp**
-    + obtain signalP5 from [the official website](https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=signalp&version=5.0&packageversion=5.0b&platform=Linux)
-    + follow the provided readme file for system-wide installation
-  + **phobius**
-    + obtain a copy of phobius from [here](https://phobius.sbc.su.se/data.html)
-    + the downloaded file should be named `phobius101_linux.tar.gz`, move to its directory within a terminal
-    + the environment includes a practical script for installing phobius: 
-      + `mamba activate DeToX && phobius-register phobius101_linux.tar.gz`
-  + **wolfPSoRT** (TODO: automatic install this)
-    +  clone [this repo](https://github.com/fmaguire/WoLFPSort)
-    +  copy the path to `runWolfPsortSummary` (e.g., `~/WoLFPSort/bin/runWolfPsortSummary`) in the proper section of `config.yaml`
+## Installation
 
-## usage
-+ activate the environment
-  + `mamba activate DeToX`
-  + copy `config.yaml` to your working directory
-  + populate it 
-  + run the pipeline
-    + `snakemake --snakefile /path/to/snakefile -r all -j 8 --configfile config.yaml` 
+
+### 1. Clone Repository
+- Clone the repository to your local machine.
+  ```bash
+  git clone <repository_url>
+  ```
+
+### 2. Switch Branch
+- Navigate to the `snakemake_port` branch.
+  ```bash
+  git switch snakemake_port
+  ```
+  *or*
+  ```bash
+  git checkout snakemake_port
+  ```
+
+### 3. Create and Activate Conda Environment
+- Utilize Mamba for efficient environment setup and activation. 
+  ```bash
+  mamba env create -f toxo_env.yml && mamba activate DeToX
+  ```
+
+### 4. Install Licensed Software
+
+#### SignalP
+- Download SignalP 5.0 from the [official website](https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=signalp&version=5.0&packageversion=5.0b&platform=Linux).
+- Follow the instructions in the provided README for system-wide installation.
+
+#### Phobius
+- Download Phobius from [this link](https://phobius.sbc.su.se/data.html).
+- Navigate to the download directory and register Phobius using the provided script:
+  ```bash
+  mamba activate DeToX && phobius-register phobius101_linux.tar.gz
+  ```
+
+#### WoLF PSORT (Pending Automatic Installation)
+- Clone the [WoLF PSORT repository](https://github.com/fmaguire/WoLFPSort).
+- Specify the path to `runWolfPsortSummary` in the `config.yaml` file.
+
+---
+
+## Usage
+
+### Activate Environment and Prepare Configuration
+1. Activate the `DeToX` environment.
+   ```bash
+   mamba activate DeToX
+   ```
+2. Copy `config.yaml` to your working directory and populate it with required information.
+
+### Run Pipeline
+Execute the pipeline using Snakemake.
+```bash
+snakemake --snakefile /path/to/snakefile -r all -j 8 --configfile config.yaml
+```
+
+---
 
 ## snakemake port
 
