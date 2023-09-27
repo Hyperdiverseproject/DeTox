@@ -272,11 +272,12 @@ rule build_toxin_blast_db: #todo: do we switch to diamond for max speed?
 rule blast_on_toxins:
 #   Description: runs blastp against the toxin database. The query are the peptides without any signal sequence. The rule runs blast and extracts the fasta at the same time. might be split in two rules for easier management.
     input:
-        fasta_file = rules.extract_secreted_peptides.output.non_secreted_peptides,
+        nonsec_fasta_file = rules.extract_secreted_peptides.output.non_secreted_peptides,
+        sec_fasta_file = rules.extract_non_TM_peptides.output.non_TM_peptides,
         db_file = rules.build_toxin_blast_db.output.outfile,
         blast_db_alias = config['toxin_db'],
     output:
-        blast_result = "toxin_blast_results.tsv",
+        blast_result = config['basename'] + "_toxin_blast_results.tsv",
         hits_fasta = config['basename'] + '_toxins_by_similarity.fasta'
     params:
         evalue = config['toxins_evalue'] if 'toxins_evalue' in config else "1e-10"
@@ -286,17 +287,21 @@ rule blast_on_toxins:
         import subprocess
         from Bio import SeqIO
         build_header = f"echo \"qseqid\ttoxinDB_sseqid\ttoxinDB_pident\ttoxinDB_evalue\" > {output.blast_result}"
-        command_line = f"{build_header} && blastp -query {input.fasta_file} -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads} -db {input.blast_db_alias} -outfmt '6 qseqid sseqid pident evalue' >> {output.blast_result}"
+        command_line = f"{build_header} && blastp -query {input.nonsec_fasta_file} -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads} -db {input.blast_db_alias} -outfmt '6 qseqid sseqid pident evalue' >> {output.blast_result}"
         print(command_line)
         subprocess.run(command_line, shell=True)
-        with open(str(output.blast_result)) as infile:
+        with open(str(output.nonsec_blast_result)) as infile:
             records = []
             for line in infile:
                 records.append(line.rstrip().split("\t")[0])
         with open(output.hits_fasta, "w") as outfile:
-            for seq in SeqIO.parse(input.fasta_file, "fasta"):
+            for seq in SeqIO.parse(input.nonsec_fasta_file, "fasta"):
                 if seq.id in records:
                     SeqIO.write(seq, outfile, "fasta")
+        command_line = f"{build_header} && blastp -query {input.sec_fasta_file} -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads} -db {input.blast_db_alias} -outfmt '6 qseqid sseqid pident evalue' >> {output.blast_result}"
+        print(command_line)
+        subprocess.run(command_line, shell=True)
+        
 
 
 
@@ -426,6 +431,7 @@ rule extract_Cys_pattern:
         seq_df = fastaToDataframe(f"{input.fasta_file}")
         signalp_df = pandas.read_csv(f"{input.signalp_result}", sep='\t', names = ["ID", "signalp_prediction", "prob_signal", "prob_nosignal", "cutsite"])
         merged_df = seq_df.merge(signalp_df, on = "ID", how = "left")
+        merged_df['cutsite'] = merged_df['cutsite'].fillna("")
         merged_df['cut_site_position'] = merged_df['cutsite'].apply(lambda x: int(x.split(" ")[2].split("-")[-1][:-1]) if "pos:" in x else 0)
         merged_df['mature_peptide'] = merged_df.apply(lambda x: x['Sequence'][x['cut_site_position']:], axis=1)
         merged_df['Cys_pattern'] = merged_df['mature_peptide'].apply(lambda x: get_cys_pattern(x))
@@ -475,12 +481,10 @@ if config["blast_uniprot"] == True:
         input:
             fasta_file = rules.download_uniprot.output.database
         output:
-            db_file = "databases/uniprot_blast_db.pin"
-        params:
-            alias = "databases/uniprot_blast_db"
+            db_file = "databases/uniprot_blast_db.dmnd"
         shell:
             """
-            gunzip -c {input.fasta_file} | makeblastdb -in - -dbtype prot -out {params.alias} -title {params.alias}
+            diamond makedb --in {input.fasta_file} --db {output.db_file}
             """
 
     rule blast_on_uniprot:
@@ -492,13 +496,12 @@ if config["blast_uniprot"] == True:
             blast_result = config['basename'] + "_uniprot_blast_results.tsv"
         params:
             evalue = config['uniprot_evalue'] if 'uniprot_evalue' in config else "1e-10",
-            alias = rules.make_uniprot_blast_database.output.db_file.split(".")[0]
         threads: 
             config['threads']
         shell:
             """
             echo "qseqid\tuniprot_sseqid\tuniprot_pident\tuniprot_evalue" > {output.blast_result}
-            blastp -query {input.fasta_file} -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads} -db {params.alias} -outfmt "6 qseqid sseqid pident evalue" >> {output.blast_result}
+            diamond blastp -d {input.dbfile} -q {input.fasta_file} --outfmt 6 qseqid sseqid pident evalue --max_target_seqs 1 --threads {threads} >> {output.blast_result}
             """
 
 
@@ -521,7 +524,7 @@ outputs = [
 
 rule build_output_table:
 #   Description: this rule merges the tabular output of the other rules and merges it in a single table. It uses the outputs list defined above.
-#   todo: add the scoring system here. 
+#   todo: add the scoring system here. sec_fasta
     input:
         base = rules.extract_Cys_pattern.output,
         extra = outputs
@@ -540,6 +543,22 @@ rule build_output_table:
             dfi.columns = newcols
             print (dfi)
             df = df.merge(dfi, how = "left", on = "ID")
+        #todo: add scoring system here
+        try:
+            df = pandas.read_csv(name+'_df_ORFs.alldata',delimiter="\t")
+            df = df.assign(Rating='')
+            df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'S') if pandas.notna(row['signalp_prediction']) else str(row['Rating'] + '*'), axis=1)
+            df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'B') if (row['toxinDB_sseqid'] != "nohit" ) else row['Rating'], axis=1)
+            if 'CysPattern' in df.columns:
+                df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'C') if pandas.notna(row['Cys_pattern']) else row['Rating'], axis=1)
+            if 'TPM' in df.columns:
+                df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'T') if (float(row['TPM'])>=float(args.TPMthreshold)) else row['Rating'], axis=1)
+            df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'D') if pandas.notna(row['pfam domains']) else row['Rating'], axis=1)
+            if 'uniprot_sseqid' in df.columns:
+                df['Rating'] = df.apply(lambda row: str(row['Rating'] + '!') if pandas.notna(row['uniprot_sseqid']) and (row['toxinDB_sseqid'] == "nohit" ) else row['Rating'], axis=1)
+        except:
+            print("An error has occurred during sequence rating")
+            sys.exit()  
         df.drop_duplicates().to_csv(f"{output}", sep='\t', index=False)
 
 rule all:
