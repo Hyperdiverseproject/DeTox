@@ -535,7 +535,6 @@ outputs = [
 
 rule build_output_table:
 #   Description: this rule merges the tabular output of the other rules and merges it in a single table. It uses the outputs list defined above.
-#   todo: add the scoring system here. sec_fasta
     input:
         base = rules.extract_Cys_pattern.output,
         extra = outputs
@@ -574,6 +573,7 @@ rule build_output_table:
         except Exception as e:
             print(f"An error has occurred during sequence rating: {e}")
             sys.exit()  
+        df = df[df['mature_peptide'].apply(lambda x: len(str(x))) > 3]
         df.drop_duplicates().to_csv(f"{output}", sep='\t', index=False)
 
 rule all:
