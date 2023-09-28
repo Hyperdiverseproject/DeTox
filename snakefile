@@ -125,10 +125,22 @@ rule detect_orfs:
         orfipy --procs {threads} --start ATG --pep {output.aa_sequences} --min {params.minlen} --max {params.maxlen} {input.nucleotide_sequences} --outdir .
         """
 
+rule drop_X:
+    input:
+        rules.detect_orfs.output.aa_sequences
+    output:
+        config['basename'] + "_noX.faa"
+    run:
+        from Bio import SeqIO
+        with open(f"{output}", "w") as outfile:
+            for seq in SeqIO.parse(input.aa_sequences, "fasta"):
+                if "X" not in seq.seq:
+                    SeqIO.write(seq, outfile, "fasta")
+
 rule cluster_peptides:
 #   Description: runs cd-hit on predicted peptide to remove excess redundancy
     input:
-        aa_sequences = rules.detect_orfs.output.aa_sequences
+        aa_sequences = rules.drop_X.output
     output:
         filtered_aa_sequences = config['basename'] + ".clustered.faa"
     params:
