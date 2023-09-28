@@ -455,7 +455,7 @@ rule extract_Cys_pattern:
 ### conditional rules
 
 
-if config.get("quant"): # only run this rule if the quant option is active
+if config['quant'] == True: # only run this rule if the quant option is active
     rule run_salmon:
     #   Description: run quantification on the entire transcriptome
         input: 
@@ -554,7 +554,12 @@ rule build_output_table:
             dfi.columns = newcols
             print (dfi)
             df = df.merge(dfi, how = "left", on = "ID")
-        #todo: add scoring system here
+        if config['quant'] == True:
+            df['contig'] = df['ID'].apply(lambda x: x.split("_ORF")[0])
+            q = pd.read_csv(f"{rules.run_salmon.output.quantification}", sep = "\t")
+            newcols = [i for i in q.columns]
+            newcols[0] = "contig"
+            df = df.merge(q, how = "left", on = "contig")
         try:
             df = df.assign(Rating='')
             df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'S') if pandas.notna(row['signalp_prediction']) else str(row['Rating'] + '*'), axis=1)
