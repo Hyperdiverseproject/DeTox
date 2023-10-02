@@ -211,7 +211,7 @@ rule filter_signalp_outputs:
     output:
         config["basename"] + "_filtered_sigp.tsv"
     params:
-        threshold = 0.8 # todo: user defined
+        threshold = 0.7 # todo: user defined
     shell:
         """
         cat {input.files} | sed '/^#/d' | grep -v "?" | awk '$3 > {params.threshold}' > {output}
