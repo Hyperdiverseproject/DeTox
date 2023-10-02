@@ -133,7 +133,7 @@ rule drop_X:
     run:
         from Bio import SeqIO
         with open(f"{output}", "w") as outfile:
-            for seq in SeqIO.parse(input.aa_sequences, "fasta"):
+            for seq in SeqIO.parse(f"{input}", "fasta"):
                 if "X" not in seq.seq:
                     SeqIO.write(seq, outfile, "fasta")
 
