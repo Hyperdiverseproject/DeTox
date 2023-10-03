@@ -132,8 +132,8 @@ rule drop_X:
         drop_sequence = config['basename'] + "_noX.faa"
     run:
         from Bio import SeqIO
-        with open(f"{output.drop_sequence}", "w") as outfile:
-            for seq in SeqIO.parse(input.aa_sequences, "fasta"):
+        with open(f"{output}", "w") as outfile:
+            for seq in SeqIO.parse(f"{input}", "fasta"):
                 if "X" not in seq.seq:
                     SeqIO.write(seq, outfile, "fasta")
 
