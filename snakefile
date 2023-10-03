@@ -38,7 +38,7 @@ rule trim_reads:
     shell:
         """
         mkdir -p trimmed_reads
-        trimmomatic PE -threads {threads} {input.r1} {input.r2} {output.r1} {output.r1_unpaired} {output.r2} {output.r2_unpaired} ILLUMINACLIP:{input.adapters}:2:40:15 LEADING:15 TRAILING:15 MINLEN:25 SLIDINGWINDOW:4:15"
+        trimmomatic PE -threads {threads} {input.r1} {input.r2} {output.r1} {output.r1_unpaired} {output.r2} {output.r2_unpaired} ILLUMINACLIP:{input.adapters}:2:40:15 LEADING:15 TRAILING:15 MINLEN:25 SLIDINGWINDOW:4:15
         """
 
 rule assemble_transcriptome:
@@ -117,7 +117,7 @@ rule detect_orfs:
     output:
         aa_sequences = config['basename'] + ".faa"
     params:
-        minlen = "66" if "minlen" not in config else config['minlen'],
+        minlen = "99" if "minlen" not in config else config['minlen'],
         maxlen = "30000000" if "maxlen" not in config else config['maxlen']
     threads: config['threads']
     shell:
@@ -127,12 +127,12 @@ rule detect_orfs:
 
 rule drop_X:
     input:
-        rules.detect_orfs.output.aa_sequences
+        aa_sequences = rules.detect_orfs.output.aa_sequences
     output:
-        config['basename'] + "_noX.faa"
+        drop_sequence = config['basename'] + "_noX.faa"
     run:
         from Bio import SeqIO
-        with open(f"{output}", "w") as outfile:
+        with open(f"{output.drop_sequence}", "w") as outfile:
             for seq in SeqIO.parse(input.aa_sequences, "fasta"):
                 if "X" not in seq.seq:
                     SeqIO.write(seq, outfile, "fasta")
@@ -140,7 +140,7 @@ rule drop_X:
 rule cluster_peptides:
 #   Description: runs cd-hit on predicted peptide to remove excess redundancy
     input:
-        aa_sequences = rules.drop_X.output
+        aa_sequences = rules.drop_X.output.drop_sequence
     output:
         filtered_aa_sequences = config['basename'] + ".clustered.faa"
     params:
@@ -166,7 +166,7 @@ rule trim_peptides:
         import subprocess
         with open(output.trimmed_sequences, "w") as outfile:
             for seq in SeqIO.parse(input.aa_sequences, "fasta"):
-                outfile.write(f">{seq.id}\n{seq.seq[:31]}\n")
+                outfile.write(f">{seq.id}\n{seq.seq[:50]}\n")
 
 
 checkpoint split_fasta:
@@ -211,10 +211,10 @@ rule filter_signalp_outputs:
     output:
         config["basename"] + "_filtered_sigp.tsv"
     params:
-        threshold = 0.8 # todo: user defined
+        threshold = 0.7 # todo: user defined
     shell:
         """
-        cat {input.files} | sed '/^#/d' | grep -v "?" | awk '$3 > {params.threshold}' > {output}
+        awk -v b={params.threshold} -F'\t' '!/^#/ && !/\?/  && $3 > b' {input.files} > {output}
         """
 
 rule extract_secreted_peptides:
@@ -529,6 +529,7 @@ outputs = [
     rules.blast_on_toxins.output.blast_result,
     rules.blast_on_uniprot.output.blast_result,
     rules.detect_repeated_aa.output.repeated_aa,
+    rules.run_salmon.output.quantification,
 ]
 
 
@@ -555,14 +556,15 @@ rule build_output_table:
             df = df.merge(dfi, how = "left", on = "ID")
         if config['quant'] == True:
             df['contig'] = df['ID'].apply(lambda x: x.split("_ORF")[0])
-            q = pd.read_csv(f"{rules.run_salmon.output.quantification}", sep = "\t")
+            q = pandas.read_csv(f"{rules.run_salmon.output.quantification}", sep = "\t")
             newcols = [i for i in q.columns]
             newcols[0] = "contig"
+            q.columns = newcols
             df = df.merge(q, how = "left", on = "contig")
         try:
             df = df.assign(Rating='')
-            df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'S') if pandas.notna(row['signalp_prediction']) else str(row['Rating'] + '*'), axis=1)
-            df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'B') if (row['toxinDB_sseqid'] != "nohit" ) else row['Rating'], axis=1)
+            df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'S') if (row['signalp_prediction'] != 'OTHER') else str(row['Rating'] + '*'), axis=1)
+            df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'B') if pandas.notna(row['toxinDB_sseqid']) else row['Rating'], axis=1)
             if 'CysPattern' in df.columns:
                 df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'C') if pandas.notna(row['Cys_pattern']) else row['Rating'], axis=1)
             if 'TPM' in df.columns:
