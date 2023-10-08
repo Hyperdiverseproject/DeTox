@@ -122,7 +122,7 @@ rule detect_orfs:
     threads: config['threads']
     shell:
         """
-        orfipy --procs {threads} --start ATG --pep {output.aa_sequences} --min {params.minlen} --max {params.maxlen} {input.nucleotide_sequences} --outdir .
+        orfipy --procs {threads} --start ATG --partial-3 --partial-5 --pep {output.aa_sequences} --min {params.minlen} --max {params.maxlen} {input.nucleotide_sequences} --outdir .
         """
 
 rule drop_X:
@@ -211,7 +211,7 @@ rule filter_signalp_outputs:
     output:
         config["basename"] + "_filtered_sigp.tsv"
     params:
-        threshold = 0.7 # todo: user defined
+        threshold = config['signalp_dvalue'] if 'signalp_dvalue' in config else "0.7"
     shell:
         """
         awk -v b={params.threshold} -F'\t' '!/^#/ && !/\?/  && $3 > b' {input.files} > {output}
@@ -476,44 +476,44 @@ if config['quant'] == True: # only run this rule if the quant option is active
             """
 
 
-if config["blast_uniprot"] == True:
-    rule download_uniprot:
-    #   Description: downloads the uniprot fasta
-        output:
-            db_dir = directory("databases"),
-            database = "databases/uniprot.fasta.gz"
-        shell:
-            """
-            curl https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz -o {output.database}
-            """
-    
-    rule make_uniprot_blast_database:
-    #   Description: builds a blast database from the uniprot fasta
-        input:
-            fasta_file = rules.download_uniprot.output.database
-        output:
-            db_file = "databases/uniprot_blast_db.dmnd"
-        shell:
-            """
-            diamond makedb --in {input.fasta_file} --db {output.db_file}
-            """
 
-    rule blast_on_uniprot:
-    #   Description: run blast against the uniprot database, return only the best hit
-        input:
-            fasta_file = rules.retrieve_candidate_toxins.output,
-            db_file = rules.make_uniprot_blast_database.output.db_file
-        output:
-            blast_result = config['basename'] + "_uniprot_blast_results.tsv"
-        params:
-            evalue = config['uniprot_evalue'] if 'uniprot_evalue' in config else "1e-10",
-        threads: 
-            config['threads']
-        shell:
-            """
-            echo "qseqid\tuniprot_sseqid\tuniprot_pident\tuniprot_evalue" > {output.blast_result}
-            diamond blastp -d {input.db_file} -q {input.fasta_file} --outfmt 6 qseqid sseqid pident evalue --max-target-seqs 1 --threads {threads} >> {output.blast_result}
-            """
+rule download_uniprot:
+#   Description: downloads the uniprot fasta
+    output:
+        db_dir = directory("databases"),
+        database = "databases/uniprot.fasta.gz"
+    shell:
+        """
+        curl https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz -o {output.database}
+        """
+
+rule make_uniprot_blast_database:
+#   Description: builds a blast database from the uniprot fasta
+    input:
+        fasta_file = rules.download_uniprot.output.database
+    output:
+        db_file = "databases/uniprot_blast_db.dmnd"
+    shell:
+        """
+        diamond makedb --in {input.fasta_file} --db {output.db_file}
+        """
+
+rule blast_on_uniprot:
+#   Description: run blast against the uniprot database, return only the best hit
+    input:
+        fasta_file = rules.retrieve_candidate_toxins.output,
+        db_file = rules.make_uniprot_blast_database.output.db_file
+    output:
+        blast_result = config['basename'] + "_uniprot_blast_results.tsv"
+    params:
+        evalue = config['swissprot_evalue'] if 'swissprot_evalue' in config else "1e-10",
+    threads: 
+        config['threads']
+    shell:
+        """
+        echo "qseqid\tuniprot_sseqid\tuniprot_pident\tuniprot_evalue" > {output.blast_result}
+        diamond blastp -d {input.db_file} -q {input.fasta_file} --outfmt 6 qseqid sseqid pident evalue --max-target-seqs 1 --threads {threads} >> {output.blast_result}
+        """
 
 
 # TODO: follow this comment for the rule that will wraps everything up and create the final table. -> Also, in my opinion these peptides should be marked with a warning flag in the output, specifying which issue affects them (e.g. “this peptide lacks a signal peptide”, “this peptide contains a transmembrane domain”, etc.)
@@ -524,12 +524,12 @@ if config["blast_uniprot"] == True:
 
 # this is the list with all the expected output to be put in the final table, will be filled depending on the configuration file. 
 outputs = [
-    rules.run_wolfpsort.output,
+    (rules.run_wolfpsort.output if config['wolfpsort'] else []),
     rules.parse_hmmsearch_output.output,
     rules.blast_on_toxins.output.blast_result,
-    rules.blast_on_uniprot.output.blast_result,
+    (rules.blast_on_uniprot.output.blast_result if config['swissprot'] else []),
     rules.detect_repeated_aa.output.repeated_aa,
-    rules.run_salmon.output.quantification,
+    (rules.run_salmon.output.quantification if config['quant'] else []),
 ]
 
 
@@ -543,7 +543,7 @@ rule build_output_table:
         config['basename'] + "_toxins.tsv"
     run:
         df = pandas.read_csv(f"{input.base}", sep='\t')
-        for i in outputs:
+        for i in input.extra:
             print(i)
             dfi = pandas.read_csv(str(i), sep = "\t")
             print(dfi)
