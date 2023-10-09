@@ -54,66 +54,66 @@ rule assemble_transcriptome:
     threads: config['threads']
     shell:
         """
-        Trinity --seqType fq --left {rules.trim_reads.output.r1} --right {rules.trim_reads.output.r2} --CPU {threads} --max_memory {params.memory} --KMER_SIZE 31
+        Trinity --seqType fq --left {rules.trim_reads.output.r1} --right {rules.trim_reads.output.r2} --CPU {threads} --max_memory {params.memory}
         """
     
+if 'contaminants' in config and config['contaminants'] not in [None, ""]:
+    rule build_contaminants_database:
+    #   Description: builds blast database for the removal of contaminants   
+    #   todo: make this optional like in the original code
+        input:
+            fasta_db = config['contaminants']
+        output:
+            blast_db = config['contaminants'] + ".nin"
+        shell:
+            """
+            makeblastdb -dbtype nucl -in {input.fasta_db}
+            """
 
-rule build_contaminants_database:
-#   Description: builds blast database for the removal of contaminants   
-#   todo: make this optional like in the original code
-    input:
-        fasta_db = config['contaminants']
-    output:
-        blast_db = config['contaminants'] + ".nin"
-    shell:
-        """
-        makeblastdb -dbtype nucl -in {input.fasta_db}
-        """
+    rule blast_on_contaminants:
+    #   Description: performs the actual blast of the contigs against the contaminants database
+        input:
+            blast_db = rules.build_contaminants_database.output.blast_db,
+            blast_db_alias =  config['contaminants'],
+            contigs = config['transcriptome'] if 'transcriptome' in config and config['transcriptome'] is not None else rules.assemble_transcriptome.output.assembly,
+        output:
+            blast_result = config['basename'] + ".blastsnuc.out"
+        params:
+            evalue = config['contamination_evalue']
+        threads: config['threads']
+        shell:
+            """
+            blastn -db {input.blast_db_alias} -query {input.contigs} -out {output.blast_result} -outfmt 6 -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads}
+            """
 
-rule blast_on_contaminants:
-#   Description: performs the actual blast of the contigs against the contaminants database
-    input:
-        blast_db = rules.build_contaminants_database.output.blast_db,
-        blast_db_alias =  config['contaminants'],
-        contigs = config['transcriptome'] if 'transcriptome' in config else rules.assemble_transcriptome.output.assembly,
-    output:
-        blast_result = config['basename'] + ".blastsnuc.out"
-    params:
-        evalue = config['contamination_evalue']
-    threads: config['threads']
-    shell:
-        """
-        blastn -db {input.blast_db_alias} -query {input.contigs} -out {output.blast_result} -outfmt 6 -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads}
-        """
-
-rule filter_contaminants:
-#   Description: performs the actual filtering
-    input: 
-        blast_result = rules.blast_on_contaminants.output.blast_result,
-        contigs = config['transcriptome'] if 'transcriptome' in config else rules.assemble_transcriptome.output.assembly,
-    output:
-        filtered_contigs = config['basename'] + ".filtered.fasta"
-    run:
-        from Bio import SeqIO
-        records = []
-        infile = open(input.blast_result, 'r')
-        for line in infile:
-            line = line.rstrip()
-            if line[0] != '#':
-                blast = line.split()                                        
-                records.append(blast[0]) # we recover the ID of the significan hits
-        infile.close()
-        recordIter = SeqIO.parse(open(input.contigs), "fasta")
-        with open(output.filtered_contigs, "w") as handle:
-            for rec in recordIter:
-                if rec.id not in records:
-                    SeqIO.write(rec, handle, "fasta")
+    rule filter_contaminants:
+    #   Description: performs the actual filtering
+        input: 
+            contigs = config['transcriptome'] if 'transcriptome' in config  and config['transcriptome'] is not None else rules.assemble_transcriptome.output.assembly,
+            blast_result = rules.blast_on_contaminants.output.blast_result,    
+        output:
+            filtered_contigs = config['basename'] + ".filtered.fasta"
+        run:
+            from Bio import SeqIO
+            records = []
+            infile = open(input.blast_result, 'r')
+            for line in infile:
+                line = line.rstrip()
+                if line[0] != '#':
+                    blast = line.split()                                        
+                    records.append(blast[0]) # we recover the ID of the significan hits
+            infile.close()
+            recordIter = SeqIO.parse(open(input.contigs), "fasta")
+            with open(output.filtered_contigs, "w") as handle:
+                for rec in recordIter:
+                    if rec.id not in records:
+                        SeqIO.write(rec, handle, "fasta")
 
 rule detect_orfs:
 #   Description: finds complete orfs within the input nucleotide sequences. 
 #   i'm testing this with orfipy instead of orffinder to leverage multithreading
     input:
-        nucleotide_sequences = rules.filter_contaminants.output.filtered_contigs
+        nucleotide_sequences = rules.filter_contaminants.output.filtered_contigs if config['contaminants'] not in [None, ""] else config['transcriptome'] if 'transcriptome' in config  and config['transcriptome'] != None else rules.assemble_transcriptome.output.assembly
     output:
         aa_sequences = config['basename'] + ".faa"
     params:
@@ -459,7 +459,7 @@ if config['quant'] == True: # only run this rule if the quant option is active
     rule run_salmon:
     #   Description: run quantification on the entire transcriptome
         input: 
-            transcriptome = config['transcriptome'],
+            transcriptome = config['transcriptome'] if 'transcriptome' in config and config['transcriptome'] != None else rules.assemble_transcriptome.output.assembly,
             r1 = rules.trim_reads.output.r1,
             r2 = rules.trim_reads.output.r2
         output:
