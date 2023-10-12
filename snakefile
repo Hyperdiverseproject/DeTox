@@ -415,38 +415,23 @@ rule detect_repeated_aa:
         secreted = secreted.drop(columns=["Repeats","Repeats1","Repeats2","Repeats3"])
         secreted.to_csv(f"{output.repeated_aa}", index=False,sep='\t')
 
-rule extract_Cys_pattern:
-#   Description: this rule takes as an input the fasta file for the candidate toxins and the signalp output. Using the latter it separates the mature peptide, while those proteins lacking a signal peptides are considered already mature peptides. 
-    input:
-        fasta_file = rules.retrieve_candidate_toxins.output,
-        signalp_result = rules.filter_signalp_outputs.output
-    output:
-        config['basename'] + "_Cys_pattern.tsv"
-    run:
-        from Bio import SeqIO
-        def get_cys_pattern(seq):
-            pattern = ""
-            status = False
-            if not pandas.isna(seq) and seq.count('C') >= 4:
-                for char in seq:
-                    if char == "C":
-                        pattern = pattern + "C"
-                        status = True
-                    else:
-                        if status:
-                            pattern = pattern + "-"
-                            status = False
-                if(pattern[-1] == "-"):
-                    pattern = pattern[0:-1]
-            return pattern
-        seq_df = fastaToDataframe(f"{input.fasta_file}")
-        signalp_df = pandas.read_csv(f"{input.signalp_result}", sep='\t', names = ["ID", "signalp_prediction", "prob_signal", "prob_nosignal", "cutsite"])
-        merged_df = seq_df.merge(signalp_df, on = "ID", how = "left")
-        merged_df['cutsite'] = merged_df['cutsite'].fillna("")
-        merged_df['cut_site_position'] = merged_df['cutsite'].apply(lambda x: int(x.split(" ")[2].split("-")[-1][:-1]) if "pos:" in x else -1)
-        merged_df['mature_peptide'] = merged_df.apply(lambda x: x['Sequence'][x['cut_site_position']:] if x['cut_site_position']>0 else '' , axis=1)
-        merged_df['Cys_pattern'] = merged_df['mature_peptide'].apply(lambda x: get_cys_pattern(x) if pandas.notna(x) else '')
-        merged_df.to_csv(f"{output}", sep='\t', index=False)
+def get_cys_pattern(seq):
+    pattern = ""
+    status = False
+    if not pandas.isna(seq) and seq.count('C') >= 4:
+        for char in seq:
+            if char == "C":
+                pattern = pattern + "C"
+                status = True
+            else:
+                if status:
+                    pattern = pattern + "-"
+                    status = False
+        if(pattern[-1] == "-"):
+            pattern = pattern[0:-1]
+    if pattern == "":
+        pattern = None
+    return pattern
 
 
 ### conditional rules
@@ -534,25 +519,32 @@ outputs = [
 rule build_output_table:
 #   Description: this rule merges the tabular output of the other rules and merges it in a single table. It uses the outputs list defined above.
     input:
-        base = rules.extract_Cys_pattern.output,
+        #base = rules.extract_Cys_pattern.output,
+        fasta_file = rules.retrieve_candidate_toxins.output,
+        signalp_result = rules.filter_signalp_outputs.output,
         extra = outputs
     output:
         config['basename'] + "_toxins.tsv"
     params:
         TPMthreshold = config['TPMthreshold'] if 'TPMthreshold' in config else 1000,
     run:
-        df = pandas.read_csv(f"{input.base}", sep='\t')
+        seq_df = fastaToDataframe(f"{input.fasta_file}")
+        signalp_df = pandas.read_csv(f"{input.signalp_result}", sep='\t', names = ["ID", "signalp_prediction", "prob_signal", "prob_nosignal", "cutsite"])
+        df = seq_df.merge(signalp_df, on = "ID", how = "left")
+        #df = pandas.read_csv(f"{input.base}", sep='\t')
         for i in input.extra:
-            print(i)
             dfi = pandas.read_csv(str(i), sep = "\t")
-            print(dfi)
             if "Sequence" in dfi.columns:
                 dfi = dfi.drop(columns=["Sequence"])
             newcols = [i for i in dfi.columns]
             newcols[0] = "ID"
             dfi.columns = newcols
-            print (dfi)
             df = df.merge(dfi, how = "left", on = "ID")
+        if config['cys_pattern'] == True:
+            df['cutsite'] = df['cutsite'].fillna("")
+            df['cut_site_position'] = df['cutsite'].apply(lambda x: int(x.split(" ")[2].split("-")[-1][:-1]) if "pos:" in x else -1)
+            df['mature_peptide'] = df.apply(lambda x: x['Sequence'][x['cut_site_position']:] if x['cut_site_position']>0 else None , axis=1)
+            df['Cys_pattern'] = df['mature_peptide'].apply(lambda x: get_cys_pattern(x) if pandas.notna(x) else None)
         if config['quant'] == True:
             df['contig'] = df['ID'].apply(lambda x: x.split("_ORF")[0])
             q = pandas.read_csv(f"{rules.run_salmon.output.quantification}", sep = "\t")
@@ -565,6 +557,7 @@ rule build_output_table:
             df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'S') if pandas.notna(row['signalp_prediction']) else str(row['Rating'] + '*'), axis=1)
             df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'B') if pandas.notna(row['toxinDB_sseqid']) else row['Rating'], axis=1)
             if 'Cys_pattern' in df.columns:
+                print("cys pattern et son type : ",df["Cys_pattern"][0],type(df["Cys_pattern"][0]))
                 df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'C') if pandas.notna(row['Cys_pattern']) else row['Rating'], axis=1)
             if 'TPM_y' in df.columns:
                 df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'T') if (float(row['TPM_y'])>=float(f"{params.TPMthreshold}")) else row['Rating'], axis=1)
