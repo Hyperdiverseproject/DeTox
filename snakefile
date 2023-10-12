@@ -443,13 +443,10 @@ rule extract_Cys_pattern:
         signalp_df = pandas.read_csv(f"{input.signalp_result}", sep='\t', names = ["ID", "signalp_prediction", "prob_signal", "prob_nosignal", "cutsite"])
         merged_df = seq_df.merge(signalp_df, on = "ID", how = "left")
         merged_df['cutsite'] = merged_df['cutsite'].fillna("")
-        merged_df['cut_site_position'] = merged_df['cutsite'].apply(lambda x: int(x.split(" ")[2].split("-")[-1][:-1]) if "pos:" in x else 0)
-        merged_df['mature_peptide'] = merged_df.apply(lambda x: x['Sequence'][x['cut_site_position']:], axis=1)
-        merged_df['Cys_pattern'] = merged_df['mature_peptide'].apply(lambda x: get_cys_pattern(x))
+        merged_df['cut_site_position'] = merged_df['cutsite'].apply(lambda x: int(x.split(" ")[2].split("-")[-1][:-1]) if "pos:" in x else -1)
+        merged_df['mature_peptide'] = merged_df.apply(lambda x: x['Sequence'][x['cut_site_position']:] if x['cut_site_position']>0 else '' , axis=1)
+        merged_df['Cys_pattern'] = merged_df['mature_peptide'].apply(lambda x: get_cys_pattern(x) if pandas.notna(x) else '')
         merged_df.to_csv(f"{output}", sep='\t', index=False)
-
-
-
 
 
 ### conditional rules
@@ -542,7 +539,7 @@ rule build_output_table:
     output:
         config['basename'] + "_toxins.tsv"
     params:
-        TPMthreshold = config['TPMthreshold'] if 'TPMthreshold' in config else "1000",
+        TPMthreshold = config['TPMthreshold'] if 'TPMthreshold' in config else 1000,
     run:
         df = pandas.read_csv(f"{input.base}", sep='\t')
         for i in input.extra:
@@ -570,14 +567,14 @@ rule build_output_table:
             if 'Cys_pattern' in df.columns:
                 df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'C') if pandas.notna(row['Cys_pattern']) else row['Rating'], axis=1)
             if 'TPM_y' in df.columns:
-                df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'T') if (float(row['TPM_y'])>=float({params.TPMthreshold})) else row['Rating'], axis=1)
+                df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'T') if (float(row['TPM_y'])>=float(f"{params.TPMthreshold}")) else row['Rating'], axis=1)
             df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'D') if pandas.notna(row['pfam domains']) else row['Rating'], axis=1)
             if 'uniprot_sseqid' in df.columns:
                 df['Rating'] = df.apply(lambda row: str(row['Rating'] + '!') if pandas.notna(row['uniprot_sseqid']) and pandas.isna(row['toxinDB_sseqid']) else row['Rating'], axis=1)
         except Exception as e:
             print(f"An error has occurred during sequence rating: {e}")
             sys.exit()  
-        df = df[df['mature_peptide'].apply(lambda x: len(str(x))) > 3]
+        #df = df[df['mature_peptide'].apply(lambda x: len(str(x))) > 3]
         df.drop_duplicates().to_csv(f"{output}", sep='\t', index=False)
 
 rule all:
