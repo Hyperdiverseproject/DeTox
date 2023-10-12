@@ -15,6 +15,7 @@ signalp_dvalue: "0.7"
 signalp_path: ~/signalp-5.0b/bin/
 wolfPsort_path: ~/WoLFPSort/bin/runWolfPsortSummary
 quant: False
+TPMthreshold: "1000"
 wolfpsort: True
 swissprot: True
 swissprot_evalue: "1e-10"

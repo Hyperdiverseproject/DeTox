@@ -512,7 +512,7 @@ rule blast_on_uniprot:
     shell:
         """
         echo "qseqid\tuniprot_sseqid\tuniprot_pident\tuniprot_evalue" > {output.blast_result}
-        diamond blastp -d {input.db_file} -q {input.fasta_file} --outfmt 6 qseqid sseqid pident evalue --max-target-seqs 1 --threads {threads} >> {output.blast_result}
+        diamond blastp -d {input.db_file} -q {input.fasta_file} --evalue {params.evalue} --outfmt 6 qseqid sseqid pident evalue --max-target-seqs 1 --threads {threads} >> {output.blast_result}
         """
 
 
@@ -541,6 +541,8 @@ rule build_output_table:
         extra = outputs
     output:
         config['basename'] + "_toxins.tsv"
+    params:
+        TPMthreshold = config['TPMthreshold'] if 'TPMthreshold' in config else "1000",
     run:
         df = pandas.read_csv(f"{input.base}", sep='\t')
         for i in input.extra:
@@ -563,15 +565,15 @@ rule build_output_table:
             df = df.merge(q, how = "left", on = "contig")
         try:
             df = df.assign(Rating='')
-            df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'S') if (row['signalp_prediction'] != 'OTHER') else str(row['Rating'] + '*'), axis=1)
+            df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'S') if pandas.notna(row['signalp_prediction']) else str(row['Rating'] + '*'), axis=1)
             df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'B') if pandas.notna(row['toxinDB_sseqid']) else row['Rating'], axis=1)
-            if 'CysPattern' in df.columns:
+            if 'Cys_pattern' in df.columns:
                 df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'C') if pandas.notna(row['Cys_pattern']) else row['Rating'], axis=1)
-            if 'TPM' in df.columns:
-                df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'T') if (float(row['TPM'])>=float(args.TPMthreshold)) else row['Rating'], axis=1)
+            if 'TPM_y' in df.columns:
+                df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'T') if (float(row['TPM_y'])>=float({params.TPMthreshold})) else row['Rating'], axis=1)
             df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'D') if pandas.notna(row['pfam domains']) else row['Rating'], axis=1)
             if 'uniprot_sseqid' in df.columns:
-                df['Rating'] = df.apply(lambda row: str(row['Rating'] + '!') if pandas.notna(row['uniprot_sseqid']) and (row['toxinDB_sseqid'] == "nohit" ) else row['Rating'], axis=1)
+                df['Rating'] = df.apply(lambda row: str(row['Rating'] + '!') if pandas.notna(row['uniprot_sseqid']) and pandas.isna(row['toxinDB_sseqid']) else row['Rating'], axis=1)
         except Exception as e:
             print(f"An error has occurred during sequence rating: {e}")
             sys.exit()  
