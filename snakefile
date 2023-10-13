@@ -558,8 +558,8 @@ rule build_output_table:
             if 'Cys_pattern' in df.columns:
                 print("cys pattern et son type : ",df["Cys_pattern"][0],type(df["Cys_pattern"][0]))
                 df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'C') if pandas.notna(row['Cys_pattern']) else row['Rating'], axis=1)
-            if 'TPM_y' in df.columns:
-                df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'T') if (float(row['TPM_y'])>=float(f"{params.TPMthreshold}")) else row['Rating'], axis=1)
+            if 'TPM' in df.columns:
+                df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'T') if (float(row['TPM'])>=float(f"{params.TPMthreshold}")) else row['Rating'], axis=1)
             df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'D') if pandas.notna(row['pfam domains']) else row['Rating'], axis=1)
             if 'uniprot_sseqid' in df.columns:
                 df['Rating'] = df.apply(lambda row: str(row['Rating'] + '!') if pandas.notna(row['uniprot_sseqid']) and pandas.isna(row['toxinDB_sseqid']) else row['Rating'], axis=1)
