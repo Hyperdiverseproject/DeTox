@@ -511,7 +511,6 @@ outputs = [
     rules.blast_on_toxins.output.blast_result,
     (rules.blast_on_uniprot.output.blast_result if config['swissprot'] else []),
     rules.detect_repeated_aa.output.repeated_aa,
-    (rules.run_salmon.output.quantification if config['quant'] else []),
 ]
 
 
