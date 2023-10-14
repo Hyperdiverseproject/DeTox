@@ -284,12 +284,10 @@ rule build_toxin_blast_db: #todo: do we switch to diamond for max speed?
 rule blast_on_toxins:
 #   Description: runs blastp against the toxin database. The query are the peptides without any signal sequence. The rule runs blast and extracts the fasta at the same time. might be split in two rules for easier management.
     input:
-        nonsec_fasta_file = rules.extract_secreted_peptides.output.non_secreted_peptides,
-        sec_fasta_file = rules.extract_non_TM_peptides.output.non_TM_peptides,
+        orf_fasta_clustered_file = rules.cluster_peptides.output.filtered_aa_sequences,
         db_file = rules.build_toxin_blast_db.output.outfile,
     output:
         blast_result = config['basename'] + "_toxin_blast_results.tsv",
-        hits_fasta = config['basename'] + '_toxins_by_similarity.fasta'
     params:
         evalue = config['toxins_evalue'] if 'toxins_evalue' in config else "1e-10"
     threads: 
@@ -298,10 +296,19 @@ rule blast_on_toxins:
         import subprocess
         from Bio import SeqIO
         build_header = f"echo \"qseqid\ttoxinDB_sseqid\ttoxinDB_pident\ttoxinDB_evalue\" > {output.blast_result}"
-        command_line = f"{build_header} && diamond blastp -q {input.nonsec_fasta_file} --evalue {params.evalue} --max-target-seqs 1 --threads {threads} -d {input.db_file} --outfmt 6 qseqid sseqid pident evalue >> {output.blast_result}"
+        command_line = f"{build_header} && diamond blastp -q {input.orf_fasta_clustered_file} --evalue {params.evalue} --max-target-seqs 1 --threads {threads} -d {input.db_file} --outfmt 6 qseqid sseqid pident evalue >> {output.blast_result}"
         print(command_line)
         subprocess.run(command_line, shell=True)
-        with open(str(output.blast_result)) as infile:
+        
+
+rule retrieve_orfs_with_blast_without_signalp:
+    input:
+        nonsec_fasta_file = rules.extract_secreted_peptides.output.non_secreted_peptides,
+        blast_toxins_result = rules.blast_on_toxins.output.blast_result
+    output:
+        hits_fasta = config['basename'] + '_toxins_by_similarity.fasta'
+    run:
+        with open(str(input.blast_toxins_result)) as infile:
             records = []
             for line in infile:
                 records.append(line.rstrip().split("\t")[0])
@@ -309,18 +316,13 @@ rule blast_on_toxins:
             for seq in SeqIO.parse(input.nonsec_fasta_file, "fasta"):
                 if seq.id in records:
                     SeqIO.write(seq, outfile, "fasta")
-        command_line = f"{build_header} && diamond blastp -q {input.nonsec_fasta_file} --evalue {params.evalue} --max-target-seqs 1 --threads {threads} -d {input.db_file} --outfmt 6 qseqid sseqid pident evalue >> {output.blast_result}"
-        print(command_line)
-        subprocess.run(command_line, shell=True)
-        
-
 
 
 rule retrieve_candidate_toxins:
 #   Description: this rule just creates a fasta from the positive hits in the toxin similarity and structure searches. 
     input:
         structure_based = rules.extract_non_TM_peptides.output.non_TM_peptides,
-        similarity_based = rules.blast_on_toxins.output.hits_fasta
+        similarity_based = rules.retrieve_orfs_with_blast_without_signalp.output.hits_fasta
     output:
         config["basename"] + "_candidate_toxins.fasta"
     shell:
@@ -521,6 +523,7 @@ rule build_output_table:
         #base = rules.extract_Cys_pattern.output,
         fasta_file = rules.retrieve_candidate_toxins.output,
         signalp_result = rules.filter_signalp_outputs.output,
+        quant = rules.run_salmon.output.quantification if config['quant'] else [],
         extra = outputs
     output:
         config['basename'] + "_toxins.tsv"
@@ -546,7 +549,7 @@ rule build_output_table:
             df['Cys_pattern'] = df['mature_peptide'].apply(lambda x: get_cys_pattern(x) if pandas.notna(x) else None)
         if config['quant'] == True:
             df['contig'] = df['ID'].apply(lambda x: x.split("_ORF")[0])
-            q = pandas.read_csv(f"{rules.run_salmon.output.quantification}", sep = "\t")
+            q = pandas.read_csv(f"{input.quant}", sep = "\t")
             newcols = [i for i in q.columns]
             newcols[0] = "contig"
             q.columns = newcols
