@@ -150,7 +150,7 @@ rule cluster_peptides:
     threads: config['threads']
     shell:
         """
-        cd-hit -i {input.aa_sequences} -o {output.filtered_aa_sequences} -c {params.threshold} -M {params.memory} -T {threads} 
+        cd-hit -i {input.aa_sequences} -o {output.filtered_aa_sequences} -c {params.threshold} -M {params.memory} -T {threads} -d 40
         """
 
 rule trim_peptides:
