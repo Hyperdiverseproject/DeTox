@@ -58,22 +58,3 @@ Execute the pipeline using Snakemake.
 ```bash
 snakemake --snakefile /path/to/snakefile -r all -j 8 --configfile config.yaml
 ```
-
----
-
-## snakemake port
-
-## stuff to be done:
-
-- [x] port C pattern recognition
-  - [x] split mature peptides
-- [x] port repetitive patterns flagging
-- [x] port merging of all results in a single table
-- [ ] port scoring
-
-- [ ] automatic install of wolfpsort
-- [ ] find a wolfpsort substitute
-- [?] create a wrapper for the script
-
-## current status of the port graph:
-![DAG](dag.svg)
