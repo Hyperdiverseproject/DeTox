@@ -1,0 +1,4 @@
+test/
+.snakemake/
+.vscode/
+test_run/

@@ -1,0 +1,4 @@
+Building DAG of jobs...
+Relative file path './split_files' starts with './'. This is redundant and strongly discouraged. It can also lead to inconsistent results of the file-matching approach used by Snakemake. You can simply omit the './' for relative file paths.
+Nothing to be done (all requested files are present and up to date).
+Complete log: .snakemake/log/2023-09-18T143559.977636.snakemake.log

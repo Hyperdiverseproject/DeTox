@@ -1,0 +1,40 @@
+Building DAG of jobs...
+Relative file path './split_files' starts with './'. This is redundant and strongly discouraged. It can also lead to inconsistent results of the file-matching approach used by Snakemake. You can simply omit the './' for relative file paths.
+Using shell: /usr/bin/bash
+Provided cores: 8
+Rules claiming more threads will be scaled down.
+Job stats:
+job                      count
+---------------------  -------
+blast_on_contaminants        1
+cdhit_clustering             1
+cluster_peptides             1
+detect_orfs                  1
+filter_contaminants          1
+split_fasta                  1
+total                        6
+
+Select jobs to execute...
+
+[Mon Sep 18 12:51:07 2023]
+rule cdhit_clustering:
+    input: /home/labgen/Adamussium_colbecki.ORP.fasta
+    output: basename.clustered.fasta
+    jobid: 5
+    reason: Missing output files: basename.clustered.fasta; Set of input files has changed since last execution
+    threads: 8
+    resources: tmpdir=/tmp
+
+Terminating processes on user request, this might take some time.
+[Mon Sep 18 13:52:11 2023]
+Error in rule cdhit_clustering:
+    jobid: 5
+    input: /home/labgen/Adamussium_colbecki.ORP.fasta
+    output: basename.clustered.fasta
+    shell:
+        
+        cd-hit-est -i /home/labgen/Adamussium_colbecki.ORP.fasta -o basename.clustered.fasta -c 0.9 -M 12000 -T 8 
+        
+        (one of the commands exited with non-zero exit code; note that snakemake uses bash strict mode!)
+
+Complete log: .snakemake/log/2023-09-18T125106.598394.snakemake.log

@@ -1,0 +1,26 @@
+Building DAG of jobs...
+Relative file path './split_files' starts with './'. This is redundant and strongly discouraged. It can also lead to inconsistent results of the file-matching approach used by Snakemake. You can simply omit the './' for relative file paths.
+Using shell: /usr/bin/bash
+Provided cores: 8
+Rules claiming more threads will be scaled down.
+Job stats:
+job            count
+-----------  -------
+split_fasta        1
+total              1
+
+Select jobs to execute...
+
+[Mon Sep 18 14:25:37 2023]
+checkpoint split_fasta:
+    input: basename.filtered.faa
+    output: ./split_files
+    jobid: 0
+    reason: Missing output files: ./split_files
+    resources: tmpdir=/tmp
+DAG of jobs will be updated after completion.
+
+[Mon Sep 18 14:25:49 2023]
+Finished job 0.
+1 of 1 steps (100%) done
+Complete log: .snakemake/log/2023-09-18T142536.809320.snakemake.log

@@ -1,0 +1,45 @@
+Building DAG of jobs...
+Relative file path './split_files' starts with './'. This is redundant and strongly discouraged. It can also lead to inconsistent results of the file-matching approach used by Snakemake. You can simply omit the './' for relative file paths.
+Using shell: /usr/bin/bash
+Provided cores: 8
+Rules claiming more threads will be scaled down.
+Job stats:
+job                    count
+-------------------  -------
+cluster_peptides           1
+detect_orfs                1
+filter_contaminants        1
+split_fasta                1
+total                      4
+
+Select jobs to execute...
+
+[Mon Sep 18 14:03:22 2023]
+rule filter_contaminants:
+    input: basename.blastsnuc.out, /home/labgen/Adamussium_colbecki.ORP.fasta
+    output: basename.filtered.fasta
+    jobid: 3
+    reason: Missing output files: basename.filtered.fasta; Set of input files has changed since last execution
+    resources: tmpdir=/tmp
+
+[Mon Sep 18 14:03:27 2023]
+Finished job 3.
+1 of 4 steps (25%) done
+Select jobs to execute...
+
+[Mon Sep 18 14:03:27 2023]
+rule detect_orfs:
+    input: basename.filtered.fasta
+    output: basename.faa
+    jobid: 2
+    reason: Missing output files: basename.faa; Input files updated by another job: basename.filtered.fasta
+    threads: 8
+    resources: tmpdir=/tmp
+
+Waiting at most 5 seconds for missing files.
+MissingOutputException in rule detect_orfs in file /home/labgen/github/DeTox/snakefile, line 99:
+Job 2  completed successfully, but some output files are missing. Missing files after 5 seconds. This might be due to filesystem latency. If that is the case, consider to increase the wait time with --latency-wait:
+basename.faa
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: .snakemake/log/2023-09-18T140321.697568.snakemake.log

@@ -1,0 +1,22 @@
+transcriptome: test/transcriptome.fasta
+basename: basename
+memory: 12 # memory in GB, might change later
+threads: 8 # logic threads, not physical cores, for clarity
+R1: test/R1.fastq.gz
+R2: test/R2.fastq.gz
+adapters: test/adapters.fasta
+contaminants: test/contaminants.fasta 
+toxin_db: test/toxin_db.fasta
+toxins_evalue: "1e-10"
+contamination_evalue: "1e-5"
+clustering_threshold: "0.99"
+maxlen: 45000
+signalp_dvalue: "0.7"
+signalp_path: ~/signalp-5.0b/bin/
+wolfPsort_path: ~/WoLFPSort/bin/runWolfPsortSummary
+quant: False
+TPMthreshold: "1000"
+wolfpsort: True
+swissprot: True
+swissprot_evalue: "1e-10"
+cys_pattern: True

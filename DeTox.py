@@ -382,58 +382,61 @@ subprocess.Popen([f"rm -r {dirTest}"],shell=True).communicate()
 #================================ CHECKS RESULTS OF THE SignalP RUN AND COPY THEN IN NEW FILES =======================================================================================================
 
 def checkSignalpResultAndParse(signalPFilePath,ORFfilePath,Dvalue,outORFsNameFile,outSSNameFile):
-    """CHECKS RESULTS OF THE SignalP RUN, the file produce by signalp doesn't contain the sequence but only ID
-    So this function use IDs of signalp output to get sequence in original ORFs file
+    """CHECKS RESULTS OF THE SignalP RUN, the file produced by signalp doesn't contain the sequence but only the ID.
+    So this function uses IDs of signalp output to get the sequence from the original ORFs file.
     
-    Le fichier de signalp contient toute les potentiel ORF détecter mais beaucoup sont classer comme "OTHER". Celle ci ne
-    nous interesse pas car elles n'ont pas été identifier. Ce filtre permet de conserver uniquement les séquence identifier et qui
-    on une DValue > a un seuil.
+    The signalp file contains all the potential ORFs detected, but many are classified as "OTHER". We are not 
+    interested in these since they have not been identified. This filter retains only the identified sequences 
+    that have a DValue > threshold.
 
     Args:
-        signalPFilePath (str): _description_
-        ORFfilePath (str): _description_
-        Dvalue (float): Probality value
-        outORFsNameFile (str): sequence of ORFs containing a signal peptide
-        outSSNameFile (str): signal sequence after cleavage
+        signalPFilePath (str): Path to the SignalP output file.
+        ORFfilePath (str): Path to the original ORFs file.
+        Dvalue (float): Probability threshold value.
+        outORFsNameFile (str): Output file path for sequences of ORFs containing a signal peptide.
+        outSSNameFile (str): Output file path for the signal sequence after cleavage.
     """
-    sigdata = open(signalPFilePath, 'r')  # On ouvre le fichier de sequences signalp
+    sigdata = open(signalPFilePath, 'r')  # Open the SignalP sequences file
     signalin = []
     sigends = []
     for line in sigdata:
-        line = line.strip()     # On supprime les caractères de début et de fin
-        if line[0] !='#':       # si le premiere caractere de la ligne est différent de #      
-            data = line.split('\t')         # On split la ligne sur les tabulations
-            if data[1] != 'OTHER' and float(data[2]) >= float(Dvalue):         # si le deuxième éléments est différent de OTHER et que la probabilité d'avoir un signal peptide ( colonne 3 ) est supérieur a la DValue
-                signalin.append(data[0])            # On ajoute l'identifiant de l'ORF        
-                sigend = line[line.index('CS pos: ')+len('CS pos: '): line.index('CS pos: ')+len('CS pos: ')+2].split("-")[0] # coordonné du site de clivage dans la séquence
+        line = line.strip()     # Remove leading and trailing characters
+        if line[0] != '#':      # If the first character of the line is different from #
+            data = line.split('\t')          # Split the line on tabs
+            # If the second element is different from OTHER and the probability of having a signal peptide (column 3) is higher than DValue
+            if data[1] != 'OTHER' and float(data[2]) >= float(Dvalue):         
+                signalin.append(data[0])      # Add the ORF identifier
+                # Get the cleavage site coordinates in the sequence
+                sigend = line[line.index('CS pos: ')+len('CS pos: '): line.index('CS pos: ')+len('CS pos: ')+2].split("-")[0]
                 if '?' in sigend:
-                    sigends.append('q')             # ajouter 'q' si il y a un ? dans les coordonnées
+                    sigends.append('q')        # Add 'q' if there's a ? in the coordinates
                 else:
-                    sigends.append(int(sigend))       # ajouter les coordonnées du site de clivage dans sigends
-    sigdata.close()                                     # On ferme le fichier 
+                    sigends.append(int(sigend))  # Add the cleavage site coordinates to sigends
+    sigdata.close()                           # Close the file
     print('ORFs with signal sequence:', len(signalin), len(sigends))
     finalStat['ORFs with signal sequence:'] = len(signalin)
-    print('ORFs with unresolved Signal Séquence boundary:', sigends.count('q'))
-    finalStat['ORFs with unresolved Signal Séquence boundary:'] = sigends.count('q')
-    nbORF=0
-    allORFsfasta = open(ORFfilePath, 'r')        # on ouvre le fichier d'ORF
-    outORFsfasta = open(outORFsNameFile, 'w')       # on ouvre le fichier d'écriture des séquence des ORFs contenant un peptide signal
-    outSSfasta = open(outSSNameFile, 'w')           # fichier ou on écrit les signals sequences après clivage
-    for line in allORFsfasta:               # pour chaque ligne des ORFs 
-        line=line.strip()                       # on supprime les caractères d'espacement de début et de fin
-        if line.startswith('>'):                # si la ligne commence par un '>'
-            nbORF+=1
-            ORFID = line[1:].split()[0]             # on recupere l'id de l'ORF qui se trouve en première position après avoir split sur l'espace
-            if ORFID in signalin:                       # si cette ORF est presente dans la liste des ORF detecter par signalp
-                seq = next(allORFsfasta).strip()       # On recupere la sequence de l'ORF
-                ind = signalin.index(ORFID)             # on recupère l'indice de la sequence dans la liste des ORF avec peptide signal
-                send = sigends[ind]                     # on recupére les coordonné de clivage dans la séquence ORF
-                if send != 'q':                                 # si c'est différent de q 
-                    outORFsfasta.write('>'+ORFID+'\n')                  # On réécrit la séquence complete
-                    outORFsfasta.write(seq.replace('*', '')+'\n')       # de l'ORF dont on a détecter un peptide signal
-                    
-                    outSSfasta.write('>'+ORFID+'\n')                    # On écrit uniquement la séquence de la protéine 
-                    outSSfasta.write(seq[:send]+'\n')                   # On recupere la séquence signal contenu entre le début et le site de clivage
+    print('ORFs with unresolved Signal Sequence boundary:', sigends.count('q'))
+    finalStat['ORFs with unresolved Signal Sequence boundary:'] = sigends.count('q')
+    nbORF = 0
+    allORFsfasta = open(ORFfilePath, 'r')     # Open the ORF file
+    outORFsfasta = open(outORFsNameFile, 'w')  # Open the writing file for ORF sequences containing a signal peptide
+    outSSfasta = open(outSSNameFile, 'w')      # File to write the signal sequences after cleavage
+    for line in allORFsfasta:                  # For each line of the ORFs
+        line = line.strip()                    # Remove leading and trailing characters
+        if line.startswith('>'):               # If the line starts with '>'
+            nbORF += 1
+            # Get the ORF ID located in the first position after splitting on space
+            ORFID = line[1:].split()[0]
+            # If this ORF is present in the list of ORFs detected by SignalP
+            if ORFID in signalin:                      
+                seq = next(allORFsfasta).strip()      # Retrieve the ORF sequence
+                ind = signalin.index(ORFID)           # Get the index of the sequence in the list of ORFs with signal peptide
+                send = sigends[ind]                   # Retrieve the cleavage coordinates in the ORF sequence
+                if send != 'q':                       # If it's different from q
+                    outORFsfasta.write('>'+ORFID+'\n')                # Rewrite the complete sequence
+                    outORFsfasta.write(seq.replace('*', '')+'\n')     # of the ORF where a signal peptide was detected
+                    outSSfasta.write('>'+ORFID+'\n')                  # Write only the protein sequence
+                    outSSfasta.write(seq[:send]+'\n')                 # Retrieve the signal sequence contained between the start and the cleavage site
     finalStat['NB ORFs detected by ORFfinder:'] = nbORF
     allORFsfasta.close()
     outORFsfasta.close()
@@ -461,6 +464,8 @@ phobius_filter_df = phobius_filter_df[phobius_filter_df["TM"]==0]
 phobius_filter_df = phobius_filter_df.drop(["TM","SP","Prediction","SequenceID"],axis=1, errors='ignore')
 dataframe_to_fasta(phobius_filter_df, "Sequence", "ID",(name+'_finalORFs.fasta'))
 
+
+
 #================================ Similarity approach, detection of toxins from ORFs with a blastp on a toxin database ================================================================================================================================================
 
 try:
@@ -471,46 +476,59 @@ except FileNotFoundError:
     sys.exit()
 
 #================================ Search of toxines in ORF without Signal peptide =====================================================================================================================================================================================
-
+# Define the input and output file names
 fasta_ORFs = "CDS-Clustered.fasta"
 fasta_ORFs_withSP = name+'_finalORFs.fasta'
 fasta_ORFs_withoutSP = name+"_SequenceWithoutSP.fa"
 ORFS_withoutSP_with_blastHit = name+"_ORFS_withoutSP_with_blastHit.out"
 
-# Liste des identifiants dans le fichier FASTA 2
+# Get the list of identifiers in the fasta_ORFs_withSP file
 ids_fasta2 = [record.id for record in SeqIO.parse(fasta_ORFs_withSP, "fasta")]
 
-# Liste des séquences dans le fichier FASTA 1 mais pas dans le fichier FASTA 2
+# Find the sequences in fasta_ORFs that are not present in fasta_ORFs_withSP
 sequences_only_in_fasta1 = []
 for record in SeqIO.parse(fasta_ORFs, "fasta"):
+    # Check if the record id is not present in the ids_fasta2 list
     if record.id.split(" ")[0] not in ids_fasta2:
-        record.id=record.id.split(" ")[0]
-        record.description=record.description.split(" ")[0]
+        # Update the record id and description
+        record.id = record.id.split(" ")[0]
+        record.description = record.description.split(" ")[0]
+        # Append the record to the sequences_only_in_fasta1 list
         sequences_only_in_fasta1.append(record)
 
-# Écrit les séquences dans le fichier de sortie
+# Write the sequences to the fasta_ORFs_withoutSP file
 with open(fasta_ORFs_withoutSP, "w") as f:
     SeqIO.write(sequences_only_in_fasta1, f, "fasta")
 
+# Convert fasta_ORFs_withoutSP to a dataframe
 dfSequenceWithoutSP = fastaToDataframe(fasta_ORFs_withoutSP)
-blastp_cline = NcbiblastpCommandline(query=fasta_ORFs_withoutSP, db=args.ToxinDatabase, evalue=args.BlastpToxinesEvalue, outfmt=6,max_target_seqs=1,out=ORFS_withoutSP_with_blastHit)
-blastp_cline()
-blast_results_withoutSP = pandas.read_csv(ORFS_withoutSP_with_blastHit, sep='\t', header=None, names=["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"])
-df_ORFs_withoutSP_whithToxinBLast = pandas.merge(dfSequenceWithoutSP,blast_results_withoutSP,left_on="ID",right_on="qseqid")
 
-# ADD blast result of ORF without SP in blast file
-blast_df_withSP = pandas.read_csv(name+"_finalORFs.blastsprot.out", sep="\t",names=["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"])
+# Run blastp command with fasta_ORFs_withoutSP as the query sequence
+blastp_cline = NcbiblastpCommandline(query=fasta_ORFs_withoutSP, db=args.ToxinDatabase, evalue=args.BlastpToxinesEvalue, outfmt=6, max_target_seqs=1, out=ORFS_withoutSP_with_blastHit)
+blastp_cline()
+
+# Read the blast results from ORFS_withoutSP_with_blastHit file into a dataframe
+blast_results_withoutSP = pandas.read_csv(ORFS_withoutSP_with_blastHit, sep='\t', header=None, names=["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"])
+
+# Merge the dfSequenceWithoutSP and blast_results_withoutSP dataframes on the "ID" column
+df_ORFs_withoutSP_withToxinBLast = pandas.merge(dfSequenceWithoutSP, blast_results_withoutSP, left_on="ID", right_on="qseqid")
+
+# Read blast_df_withSP from name+"_finalORFs.blastsprot.out" file into a dataframe
+blast_df_withSP = pandas.read_csv(name+"_finalORFs.blastsprot.out", sep="\t", names=["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"])
+
+# Concatenate blast_df_withSP and blast_results_withoutSP dataframes
 blast_df = pandas.concat([blast_df_withSP, blast_results_withoutSP], ignore_index=True)
+
+# Write blast_df to name+"_finalORFs.blastsprot.out" file
 fichier_blast = open(name+"_finalORFs.blastsprot.out", "w")
 blast_df.to_csv(fichier_blast, sep="\t", index=False, header=False)
 fichier_blast.close()
 
-# ADD sequence of ORF without SP in finalORF file
-
+# Convert fasta_ORFs_withSP to a dataframe
 dfSequenceWithSP = fastaToDataframe(fasta_ORFs_withSP)
-df_ORFs_withoutSP_whithToxinBLast = df_ORFs_withoutSP_whithToxinBLast[["ID","Sequence"]]
-df_All_final_ORF = pandas.concat([df_ORFs_withoutSP_whithToxinBLast, dfSequenceWithSP], ignore_index=True)
-dataframe_to_fasta(df_All_final_ORF, 'Sequence', 'ID',fasta_ORFs_withSP)
+
+# Select "ID" and "Sequence" columns from df_ORFs_withoutSP_withToxinBLast dataframe
+df_ORFs_withoutSP_withToxinBLast = df_ORFs
 
 #================================ HMMER ANOTATION ===================================================================================================================================================
 
@@ -544,32 +562,50 @@ def parse_hmmsearch_output(domtblout_filename):
 df_dHMMER = parse_hmmsearch_output((name+'HMMER_output2_domain_table.out'))
 
 #================================ Extract and store information from final output files  ================================================================================================================================================                        
+# Import necessary libraries
+import pandas
 
-df_FinORFs = fastaToDataframe(name+'_finalORFs.fasta')                      # On recupère les Id:sequence des ORFs ainsi que leur séquence
-df_sequenceSignal = fastaToDataframe(name+'_SSeqs.fasta')            # On recupère les id:séquence des signal sequence détecter par signalP
-toxDBBlast = pandas.read_csv(name+"_finalORFs.blastsprot.out", sep="\t",names=["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"])                             # Permettra de verifier si un match avec la bdd de toxine a été identifié selon l'ID [0,1,2,3,-2]
+# Read data from fasta files and store them in dataframes
+df_FinORFs = fastaToDataframe(name+'_finalORFs.fasta')                      # Retrieve the Id:sequence of the ORFs
+df_sequenceSignal = fastaToDataframe(name+'_SSeqs.fasta')            # Retrieve the id:sequence of the signal sequences detected by signalP
+
+# Read data from blastp output file and store it in a dataframe
+toxDBBlast = pandas.read_csv(name+"_finalORFs.blastsprot.out", sep="\t",names=["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"])                             # Check if a match with the toxin database has been identified based on the ID [0,1,2,3,-2]
+
+# Calculate the number of sequence hits with blastp
 finalStat['NB sequence hit with blastp on in-house toxin Database : '] = len(toxDBBlast)                  
 
-#================================ Creation of the final file who merge information about similarity approach and structural approach  ================================================================================================================================================
-
+# Merge information from different dataframes to create the final dataframe
 df_global = pandas.merge(df_FinORFs,df_sequenceSignal,left_on="ID",right_on="ID",how='left')
 df_global = pandas.merge(df_global,df_dHMMER[["target name","query name"]],left_on="ID",right_on="target name",how='left')
 df_global = pandas.merge(df_global,toxDBBlast[["qseqid","sseqid","pident","length","evalue"]],left_on="ID",right_on="qseqid",how='left')
-df_global.rename(columns={'Sequence_x': 'AA_seq',"Sequence_y":"SignalSeq","query name":"HMMERdomain","sseqid":"ID_blast_toxinDB","pident":"PID_blast_toxin","length":"length_blast_toxin","evalue":"Evalue_blast_toxin"}, inplace=True)
+
+# Rename columns in the merged dataframe
+df_global.rename(columns={'Sequence_x': 'AA_seq',"Sequence_y":"SignalSeq","query name":"HMMERdomain"}, inplace=True)
+
+# Drop unnecessary columns from the merged dataframe
 df_global = df_global.drop(["target name","qseqid"],axis=1, errors='ignore')
+
+# Remove duplicate rows from the merged dataframe
 df_global = df_global.drop_duplicates(subset=['ID'], keep='first').reset_index()
 
+# Fill missing values in the 'AA_seq' column with empty string
 df_global['AA_seq'].fillna('')
+
+# Fill missing values in the 'SignalSeq' column with empty string
 df_global['SignalSeq'] = df_global['SignalSeq'].fillna('')
 
+# Define a function to extract the mature sequence from the AA_seq and SignalSeq columns
 def extract_sequence_from_end(long_sequence, short_sequence):
     position = long_sequence.rfind(short_sequence)
     if position == -1:
         return None
     return long_sequence[position + len(short_sequence):]
 
+# Apply the extract_sequence_from_end function to create the 'MatureSeq' column
 df_global["MatureSeq"] = df_global.apply(lambda row: extract_sequence_from_end(row['AA_seq'], row['SignalSeq']), axis=1)
 
+# Save the final dataframe to a file
 df_global.to_csv(name+'_secreted_ORFs.alldata', index=False,sep='\t')
 
 #================================ Repeats Detection   ================================================================================================================================================
@@ -647,6 +683,9 @@ if args.wolfPSortPath is not None:
     secreted = pandas.merge(secreted,wolfPsortResultInTab[["ID_transcrit","wolfPSort_localization"]],left_on="shortID",right_on="ID_transcrit")
     finalStat["WoLFPSortStat"] = secreted["wolfPSort_localization"].value_counts()
     secreted.to_csv(name+'_secreted_ORFs.alldata', index=False,sep='\t')
+
+
+
 
 #================================ Blast on protein database ================================================================================================================================================
 if args.SwissProtDatabase:
