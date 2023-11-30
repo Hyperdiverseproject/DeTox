@@ -9,23 +9,13 @@
   git clone <repository_url>
   ```
 
-### 2. Switch Branch
-- Navigate to the `snakemake_port` branch.
-  ```bash
-  git switch snakemake_port
-  ```
-  *or*
-  ```bash
-  git checkout snakemake_port
-  ```
-
-### 3. Create and Activate Conda Environment
+### 2. Create and Activate Conda Environment
 - Utilize Mamba for efficient environment setup and activation. 
   ```bash
   mamba env create -f toxo_env.yml && mamba activate DeToX
   ```
 
-### 4. Install Licensed Software
+### 3. Install Licensed Software
 
 #### SignalP
 - Download SignalP 5.0 from the [official website](https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=signalp&version=5.0&packageversion=5.0b&platform=Linux).
