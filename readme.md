@@ -48,6 +48,30 @@ Execute the pipeline using Snakemake.
 ```bash
 snakemake --snakefile /path/to/snakefile -r all -j 8 --configfile config.yaml
 ```
-### Configuration of settings and options
 
+### Configuration of settings and options
+To use this project, you need to fill the `config.yaml` file with the following parameters:
+
+- `transcriptome`: the path to the transcriptome file in FASTA format. If this parameter is not provided, the assembly will be performed using the `R1` and `R2` parameters.
+- `basename`: the basename for the output files.
+- `memory`: the memory in GB to use for the assembly. This parameter might change later.
+- `threads`: the number of logic threads, not physical cores, to use for the assembly. For clarity, this parameter should be equal to or less than the number of cores available on your machine.
+- `R1`: the path to the forward reads file in FASTQ format. This parameter is required if `transcriptome` is not provided.
+- `R2`: the path to the reverse reads file in FASTQ format. This parameter is required if `transcriptome` is not provided.
+- `adapters`: the path to the adapters file in FASTA format. This parameter is required if `transcriptome` is not provided.
+- `contaminants`: the path to the contaminants file in FASTA format. This parameter is mandatory.
+- `toxin_db`: the path to the toxin database file in FASTA format. This parameter is mandatory.
+- `toxins_evalue`: the e-value threshold for toxin annotation using BLAST.
+- `contamination_evalue`: the e-value threshold for contamination removal using BLAST.
+- `clustering_threshold`: the clustering threshold for CD-HIT-EST.
+- `maxlen`: the maximum length of transcripts to keep.
+- `signalp_dvalue`: the D-value threshold for SignalP.
+- `signalp_path`: the path to the SignalP executable.
+- `wolfPsort_path`: the path to the WoLF PSORT executable (WoLFPSort/bin/runWolfPsortSummary). This parameter is required if `wolfpsort` is set to `True`.
+- `quant`: a boolean option to perform transcript quantification using Salmon. If set to `True`, the `R1` and `R2` parameters are required.
+- `TPMthreshold`: The TPM threshold for a sequence to be flagged "T".
+- `wolfpsort`: a boolean option to perform subcellular localization prediction using WoLF PSORT. If set to `True`, the `wolfPsort_path` parameter is required.
+- `swissprot`: a boolean option to perform functional annotation using SwissProt. If set to `True`, the `swissprot_evalue` parameter is required.
+- `swissprot_evalue`: the e-value threshold for SwissProt annotation using BLAST.
+- `cys_pattern`: a boolean option to perform cysteine pattern analysis.
 
