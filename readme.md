@@ -48,3 +48,6 @@ Execute the pipeline using Snakemake.
 ```bash
 snakemake --snakefile /path/to/snakefile -r all -j 8 --configfile config.yaml
 ```
+### Configuration of settings and options
+
+
