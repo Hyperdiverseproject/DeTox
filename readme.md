@@ -63,7 +63,7 @@ To use this project, you need to fill the `config.yaml` file with the following 
 - `toxin_db`: the path to the toxin database file in FASTA format. This parameter is mandatory.
 - `toxins_evalue`: the e-value threshold for toxin annotation using BLAST.
 - `contamination_evalue`: the e-value threshold for contamination removal using BLAST.
-- `clustering_threshold`: the clustering threshold for CD-HIT-EST.
+- `clustering_threshold`: the clustering threshold for CD-HIT.
 - `maxlen`: the maximum length of transcripts to keep.
 - `signalp_dvalue`: the D-value threshold for SignalP.
 - `signalp_path`: the path to the SignalP executable.
