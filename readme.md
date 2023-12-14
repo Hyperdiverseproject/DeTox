@@ -25,7 +25,7 @@
 - Download Phobius from [this link](https://phobius.sbc.su.se/data.html).
 - Navigate to the download directory and register Phobius using the provided script:
   ```bash
-  mamba activate DeToX && phobius-register phobius101_linux.tar.gz
+  mamba activate DeToX && phobius-register phobius101_linux.tgz
   ```
 
 #### WoLF PSORT (Pending Automatic Installation)
