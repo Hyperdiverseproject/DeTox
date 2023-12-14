@@ -10,6 +10,39 @@
   ```
 
 ### 2. Create and Activate Conda Environment
+
+#### 2.1 Installation of Conda
+
+- Before you begin, make sure you have a recent version of Python installed on your system. Conda is typically distributed with the Anaconda or Miniconda distribution.
+
+1. **Download the Anaconda Distribution:**
+   - Visit the official Anaconda website at [https://docs.conda.io/projects/conda/en/latest/user-guide/install/).
+   - Select the appropriate version for your operating system (Windows, macOS, Linux) and download the installation file.
+
+2. **Install Anaconda or Miniconda:**
+   - Follow the installation instructions provided on the official Conda page.
+   - After installation, you should have Conda installed on your system.
+
+#### 2.2 Installation of Mamba
+
+Mamba is an alternative to Conda that offers improved performance for environment and package management.
+
+1. **Install Mamba:**
+   - After installing Conda, open your terminal or command prompt.
+   - Type the following command to install Mamba:
+     ```
+     conda install -c conda-forge mamba
+     ```
+
+2. **Verify the Installation:**
+   - To ensure that Mamba has been successfully installed, type the following command:
+     ```
+     mamba --version
+     ```
+   - You should see the Mamba version displayed, confirming a successful installation.
+
+#### 2.3 Create and Activate Conda Environment
+
 - Utilize Mamba for efficient environment setup and activation. 
   ```bash
   mamba env create -f toxo_env.yml && mamba activate DeToX
