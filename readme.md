@@ -78,6 +78,8 @@ Mamba is an alternative to Conda that offers improved performance for environmen
 
 ### Run Pipeline
 Execute the pipeline using Snakemake.
+
+- This Snakemake command utilizes the -j option to specify the maximum number of threads (parallel jobs) for rule execution. The specific number, in this case, is set to 8 (-j 8). Additionally, the number of threads can be influenced by the "threads" parameter in the config.yaml file. Ensure the desired thread count is configured in the "threads" parameter of the config.yaml file before executing the command.
 ```bash
 snakemake --snakefile /path/to/snakefile -r all -j 8 --configfile config.yaml
 ```
