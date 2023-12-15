@@ -19,43 +19,44 @@ def fastaToDataframe(fastaPath):
 #configfile: "config.yaml"
 
 
+if config['R1'] not in [None, ""] and config['R2'] not in [None, ""]:
+    rule trim_reads:
+    #   Description: trims the provided raw reads
+    #   todo: switch trimmomatic for fastp?
+    #   todo: implement autodetection of compositional bias trimming?
+    #   todo: do we provide the adapter list? switching to fastp would provide automatic adapter identification
+        input:
+            r1 = config['R1'],
+            r2 = config['R2'],
+            adapters = config['adapters'],
+        output:
+            r1 = "trimmed_reads/" + config['R1'].split("/")[-1],
+            r1_unpaired = "trimmed_reads/unpaired." + config['R1'].split("/")[-1],
+            r2 = "trimmed_reads/" + config['R2'].split("/")[-1],
+            r2_unpaired = "trimmed_reads/unpaired." + config['R2'].split("/")[-1],
+        threads: config['threads']
+        shell:
+            """
+            mkdir -p trimmed_reads
+            trimmomatic PE -threads {threads} {input.r1} {input.r2} {output.r1} {output.r1_unpaired} {output.r2} {output.r2_unpaired} ILLUMINACLIP:{input.adapters}:2:40:15 LEADING:15 TRAILING:15 MINLEN:25 SLIDINGWINDOW:4:15
+            """
 
-rule trim_reads:
-#   Description: trims the provided raw reads
-#   todo: switch trimmomatic for fastp?
-#   todo: implement autodetection of compositional bias trimming?
-#   todo: do we provide the adapter list? switching to fastp would provide automatic adapter identification
-    input:
-        r1 = config['R1'],
-        r2 = config['R2'],
-        adapters = config['adapters'],
-    output:
-        r1 = "trimmed_reads/" + config['R1'].split("/")[-1],
-        r1_unpaired = "trimmed_reads/unpaired." + config['R1'].split("/")[-1],
-        r2 = "trimmed_reads/" + config['R2'].split("/")[-1],
-        r2_unpaired = "trimmed_reads/unpaired." + config['R2'].split("/")[-1],
-    threads: config['threads']
-    shell:
-        """
-        mkdir -p trimmed_reads
-        trimmomatic PE -threads {threads} {input.r1} {input.r2} {output.r1} {output.r1_unpaired} {output.r2} {output.r2_unpaired} ILLUMINACLIP:{input.adapters}:2:40:15 LEADING:15 TRAILING:15 MINLEN:25 SLIDINGWINDOW:4:15
-        """
-
-rule assemble_transcriptome:
-#   Description: Assembles a transcriptome if it is not provided. Uses Trinity 
-#   In this case sequencing reads MUST be provided in the config.
-    input:
-        r1 = rules.trim_reads.output.r1,
-        r2 = rules.trim_reads.output.r2,
-    output:
-        assembly = "trinity_out_dir/Trinity.fasta"
-    params:
-        memory = str(config['memory']) + "G"
-    threads: config['threads']
-    shell:
-        """
-        Trinity --seqType fq --left {rules.trim_reads.output.r1} --right {rules.trim_reads.output.r2} --CPU {threads} --max_memory {params.memory}
-        """
+if config['transcriptome'] in [None, ""]:
+    rule assemble_transcriptome:
+    #   Description: Assembles a transcriptome if it is not provided. Uses Trinity 
+    #   In this case sequencing reads MUST be provided in the config.
+        input:
+            r1 = rules.trim_reads.output.r1,
+            r2 = rules.trim_reads.output.r2,
+        output:
+            assembly = "trinity_out_dir/Trinity.fasta"
+        params:
+            memory = str(config['memory']) + "G"
+        threads: config['threads']
+        shell:
+            """
+            Trinity --seqType fq --left {rules.trim_reads.output.r1} --right {rules.trim_reads.output.r2} --CPU {threads} --max_memory {params.memory}
+            """
     
 if 'contaminants' in config and config['contaminants'] not in [None, ""]:
     rule build_contaminants_database:
