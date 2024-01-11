@@ -360,7 +360,7 @@ rule run_hmmer:
 #   Description: runs hmmer against the pfam database. 
     input:
         fasta_file = rules.retrieve_candidate_toxins.output,
-        pfam_db = rules.download_pfam.output.pfam_db
+        pfam_db = lambda wildcards: config["pfam_db_path"] if "pfam_db_path" in config and config["pfam_db_path"] not in [None, ""] else rules.download_pfam.output.pfam_db,
     output:
         tblout = config['basename'] + ".tblout",
         domtblout = config['basename'] + ".domtblout"
@@ -453,7 +453,7 @@ def get_cys_pattern(seq):
     return pattern
 
 
-### conditional rules
+### optional rules
 
 if config['quant'] == True:
     if config['R1'] not in [None, ""]:
@@ -505,7 +505,7 @@ rule download_uniprot:
 rule make_uniprot_blast_database:
 #   Description: builds a blast database from the uniprot fasta
     input:
-        fasta_file = rules.download_uniprot.output.database
+        fasta_file = lambda wildcards: config["swissprot_db_path"] if "swissprot_db_path" in config and config["swissprot_db_path"] not in [None, ""] else rules.download_uniprot.output.database
     output:
         db_file = "databases/uniprot_blast_db.dmnd"
     shell:

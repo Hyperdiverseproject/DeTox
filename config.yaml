@@ -7,6 +7,8 @@ R2: test/R2.fastq.gz
 adapters: test/adapters.fasta
 contaminants: test/contaminants.fasta 
 toxin_db: test/toxin_db.fasta
+pfam_db_path: test/Pfam-A.hmm
+swissprot_db_path: test/uniprot.fasta.gz
 toxins_evalue: "1e-10"
 contamination_evalue: "1e-5"
 clustering_threshold: "0.99"
