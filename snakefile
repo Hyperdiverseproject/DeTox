@@ -18,45 +18,61 @@ def fastaToDataframe(fastaPath):
 
 #configfile: "config.yaml"
 
-
-if config['R1'] not in [None, ""] and config['R2'] not in [None, ""]:
-    rule trim_reads:
-    #   Description: trims the provided raw reads
-    #   todo: switch trimmomatic for fastp?
-    #   todo: implement autodetection of compositional bias trimming?
-    #   todo: do we provide the adapter list? switching to fastp would provide automatic adapter identification
-        input:
-            r1 = config['R1'],
-            r2 = config['R2'],
-            adapters = config['adapters'],
-        output:
-            r1 = "trimmed_reads/" + config['R1'].split("/")[-1],
-            r1_unpaired = "trimmed_reads/unpaired." + config['R1'].split("/")[-1],
-            r2 = "trimmed_reads/" + config['R2'].split("/")[-1],
-            r2_unpaired = "trimmed_reads/unpaired." + config['R2'].split("/")[-1],
-        threads: config['threads']
-        shell:
-            """
-            mkdir -p trimmed_reads
-            trimmomatic PE -threads {threads} {input.r1} {input.r2} {output.r1} {output.r1_unpaired} {output.r2} {output.r2_unpaired} ILLUMINACLIP:{input.adapters}:2:40:15 LEADING:15 TRAILING:15 MINLEN:25 SLIDINGWINDOW:4:15
-            """
+if config['R1'] not in [None, ""]:
+    if 'R2' in config and config['R2'] not in [None, ""]:
+        # Reads paired-end
+        rule trim_reads:
+        #   Description: trims the provided raw reads
+            input:
+                r1 = config['R1'],
+                r2 = config['R2'],
+                adapters = config['adapters'],
+            output:
+                r1 = "trimmed_reads/" + config['R1'].split("/")[-1],
+                r1_unpaired = "trimmed_reads/unpaired." + config['R1'].split("/")[-1],
+                r2 = "trimmed_reads/" + config['R2'].split("/")[-1],
+                r2_unpaired = "trimmed_reads/unpaired." + config['R2'].split("/")[-1],
+            threads: config['threads']
+            shell:
+                """
+                mkdir -p trimmed_reads
+                trimmomatic PE -threads {threads} {input.r1} {input.r2} {output.r1} {output.r1_unpaired} {output.r2} {output.r2_unpaired} ILLUMINACLIP:{input.adapters}:2:40:15 LEADING:15 TRAILING:15 MINLEN:25 SLIDINGWINDOW:4:15
+                """
+    else:
+        # Reads single-end
+        rule trim_reads:
+            # Description: trims the provided raw single-end reads
+            input:
+                r1 = config['R1'],
+                adapters = config['adapters'],
+            output:
+                r1 = "trimmed_reads/" + config['R1'].split("/")[-1],
+            threads: config['threads']
+            shell:
+                """
+                mkdir -p trimmed_reads
+                trimmomatic SE -threads {threads} {input.r1} {output.r1} ILLUMINACLIP:{input.adapters}:2:40:15 LEADING:15 TRAILING:15 MINLEN:25 SLIDINGWINDOW:4:15
+                """
 
 if config['transcriptome'] in [None, ""]:
     rule assemble_transcriptome:
-    #   Description: Assembles a transcriptome if it is not provided. Uses Trinity 
-    #   In this case sequencing reads MUST be provided in the config.
+        # Description: Assembles a transcriptome if it is not provided. Uses Trinity 
+        # In this case sequencing reads MUST be provided in the config.
         input:
             r1 = rules.trim_reads.output.r1,
-            r2 = rules.trim_reads.output.r2,
+            r2 = lambda wildcards: rules.trim_reads.output.r2 if 'R2' in config and config['R2'] not in [None, ""] else [],
         output:
             assembly = "trinity_out_dir/Trinity.fasta"
         params:
-            memory = str(config['memory']) + "G"
+            memory = str(config['memory']) + "G",
+            seqType = "fq",
+            reads = lambda wildcards, input: "--single " + str(input.r1) if len(input.r2) == 0 else "--left " + str(input.r1) + " --right " + str(input.r2),
         threads: config['threads']
         shell:
             """
-            Trinity --seqType fq --left {rules.trim_reads.output.r1} --right {rules.trim_reads.output.r2} --CPU {threads} --max_memory {params.memory}
+            Trinity --seqType {params.seqType} {params.reads} --CPU {threads} --max_memory {params.memory}
             """
+
     
 if 'contaminants' in config and config['contaminants'] not in [None, ""]:
     rule build_contaminants_database:
@@ -439,26 +455,40 @@ def get_cys_pattern(seq):
 
 ### conditional rules
 
-
-if config['quant'] == True: # only run this rule if the quant option is active
-    rule run_salmon:
-    #   Description: run quantification on the entire transcriptome
-        input: 
-            transcriptome = config['transcriptome'] if 'transcriptome' in config and config['transcriptome'] != None else rules.assemble_transcriptome.output.assembly,
-            r1 = rules.trim_reads.output.r1,
-            r2 = rules.trim_reads.output.r2
-        output:
-            quant_dir = directory(config['basename'] + "_quant"),
-            quantification = config['basename'] + "_quant/quant.sf"
-        threads:
-            config['threads']
-        params:
-            index = "{input.transcriptome}.idx"
-        shell:
-            """
-            salmon index -t {input.transcriptome} -i {params.index} -p {threads}
-            salmon quant -i {params.index} -l A -1 {input.r1} -2 {input.r2} --validateMappings -o {output.quant_dir}
-            """
+if config['quant'] == True:
+    if config['R1'] not in [None, ""]:
+        if 'R2' in config and config['R2'] not in [None, ""]:
+            # Reads paired-end
+            rule run_salmon:
+                input:
+                    transcriptome = lambda wildcards: config['transcriptome'] if 'transcriptome' in config and config['transcriptome'] not in [None, ""] else rules.assemble_transcriptome.output.assembly,
+                    r1 = rules.trim_reads.output.r1,
+                    r2 = rules.trim_reads.output.r2
+                output:
+                    quant_dir = directory(config['basename'] + "_quant"),
+                    quantification = config['basename'] + "_quant/quant.sf"
+                threads:
+                    config['threads']
+                shell:
+                    """
+                    salmon index -t {input.transcriptome} -i salmon.idx -p {threads}
+                    salmon quant -i salmon.idx -l A -1 {input.r1} -2 {input.r2} --validateMappings -o {output.quant_dir}
+                    """
+        else:
+            rule run_salmon:
+                input:
+                    transcriptome = lambda wildcards: config['transcriptome'] if 'transcriptome' in config and config['transcriptome'] not in [None, ""] else rules.assemble_transcriptome.output.assembly,
+                    r1 = rules.trim_reads.output.r1
+                output:
+                    quant_dir = directory(config['basename'] + "_quant"),
+                    quantification = config['basename'] + "_quant/quant.sf"
+                threads:
+                    config['threads']
+                shell:
+                    """
+                    salmon index -t {input.transcriptome} -i salmon.idx -p {threads}
+                    salmon quant -i salmon.idx -l A -r {input.r1} --validateMappings -o {output.quant_dir}
+                    """
 
 
 
