@@ -89,13 +89,15 @@ To use this project, you need to fill the `config.yaml` file with the following 
 
 - `transcriptome`: the path to the transcriptome file in FASTA format. If this parameter is not provided, the assembly will be performed using the `R1` and `R2` parameters.
 - `basename`: the basename for the output files.
-- `memory`: the memory in GB to use for the assembly. This parameter might change later.
+- `memory`: the memory in GB to use for the assembly.
 - `threads`: the number of logic threads, not physical cores, to use for the assembly. For clarity, this parameter should be equal to or less than the number of cores available on your machine.
-- `R1`: the path to the forward reads file in FASTQ format. This parameter is required if `transcriptome` is not provided.
-- `R2`: the path to the reverse reads file in FASTQ format. This parameter is required if `transcriptome` is not provided.
-- `adapters`: the path to the adapters file in FASTA format. This parameter is required if `transcriptome` is not provided.
+- `R1`: the path to the forward paired-end or single-end reads file in FASTQ format. This parameter is required if `transcriptome` is not provided.
+- `R2`: the path to the reverse paired-end reads file in FASTQ format. This parameter is required if `transcriptome` is not provided and data are paired-end.
+- `adapters`: the path to the adapters file in FASTA format. This parameter is required if `transcriptome` is not provided are paired end.
 - `contaminants`: the path to the contaminants file in FASTA format. This parameter is mandatory.
 - `toxin_db`: the path to the toxin database file in FASTA format. This parameter is mandatory.
+- `pfam_db_path`: the path to the Pfam database file in .hmm format. If no path is provided, the database is downloaded automatically.
+- `swissprot_db_path`: the path to the SwissProt database file in fasta.gz format. If no path is provided, the database is downloaded automatically.
 - `toxins_evalue`: the e-value threshold for toxin annotation using BLAST.
 - `contamination_evalue`: the e-value threshold for contamination removal using BLAST.
 - `clustering_threshold`: the clustering threshold for CD-HIT.
