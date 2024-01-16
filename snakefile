@@ -5,7 +5,7 @@ import glob
 def get_signalp_splits(wildcards):
     import os
     checkpoint_output = checkpoints.split_fasta.get(**wildcards).output[0]
-    return expand('./split_files/{i}.fasta',
+    return expand(global_output("")+'split_files/{i}.fasta',
            i=glob_wildcards(os.path.join(checkpoint_output, '{i}.fasta')).i)
 
 def fastaToDataframe(fastaPath):
@@ -15,6 +15,14 @@ def fastaToDataframe(fastaPath):
         data.append({'ID': record.id, 'Sequence': str(record.seq)})
     return pandas.DataFrame(data)
 
+
+def global_output(path):
+    """ Construit le chemin d'output complet """
+    output_dir = config.get("output_dir", "")
+    if output_dir:
+        return f"{output_dir}/{path}"
+    else:
+        return path
 
 #configfile: "config.yaml"
 
@@ -28,10 +36,10 @@ if config['R1'] not in [None, ""]:
                 r2 = config['R2'],
                 adapters = config['adapters'],
             output:
-                r1 = "trimmed_reads/" + config['R1'].split("/")[-1],
-                r1_unpaired = "trimmed_reads/unpaired." + config['R1'].split("/")[-1],
-                r2 = "trimmed_reads/" + config['R2'].split("/")[-1],
-                r2_unpaired = "trimmed_reads/unpaired." + config['R2'].split("/")[-1],
+                r1 = global_output("trimmed_reads/" + config['R1'].split("/")[-1]),
+                r1_unpaired = global_output("trimmed_reads/unpaired." + config['R1'].split("/")[-1]),
+                r2 = global_output("trimmed_reads/" + config['R2'].split("/")[-1]),
+                r2_unpaired = global_output("trimmed_reads/unpaired." + config['R2'].split("/")[-1]),
             threads: config['threads']
             shell:
                 """
@@ -46,7 +54,7 @@ if config['R1'] not in [None, ""]:
                 r1 = config['R1'],
                 adapters = config['adapters'],
             output:
-                r1 = "trimmed_reads/" + config['R1'].split("/")[-1],
+                r1 = global_output("trimmed_reads/" + config['R1'].split("/")[-1]),
             threads: config['threads']
             shell:
                 """
@@ -62,7 +70,7 @@ if config['transcriptome'] in [None, ""]:
             r1 = rules.trim_reads.output.r1,
             r2 = lambda wildcards: rules.trim_reads.output.r2 if 'R2' in config and config['R2'] not in [None, ""] else [],
         output:
-            assembly = "trinity_out_dir/Trinity.fasta"
+            assembly = global_output("trinity_out_dir/Trinity.fasta")
         params:
             memory = str(config['memory']) + "G",
             seqType = "fq",
@@ -70,7 +78,7 @@ if config['transcriptome'] in [None, ""]:
         threads: config['threads']
         shell:
             """
-            Trinity --seqType {params.seqType} {params.reads} --CPU {threads} --max_memory {params.memory}
+            Trinity --seqType {params.seqType} {params.reads} --CPU {threads} --max_memory {params.memory} --output {output.assembly}
             """
 
     
@@ -81,10 +89,10 @@ if 'contaminants' in config and config['contaminants'] not in [None, ""]:
         input:
             fasta_db = config['contaminants']
         output:
-            blast_db = config['contaminants'] + ".nin"
+            blast_db = global_output(config['contaminants'].split("/")[-1] + ".nin")
         shell:
             """
-            makeblastdb -dbtype nucl -in {input.fasta_db}
+            makeblastdb -dbtype nucl -in {input.fasta_db} -out {output.blast_db}
             """
 
     rule blast_on_contaminants:
@@ -94,7 +102,7 @@ if 'contaminants' in config and config['contaminants'] not in [None, ""]:
             blast_db_alias =  config['contaminants'],
             contigs = config['transcriptome'] if 'transcriptome' in config and config['transcriptome'] is not None else rules.assemble_transcriptome.output.assembly,
         output:
-            blast_result = config['basename'] + ".blastsnuc.out"
+            blast_result = global_output(config['basename'] + ".blastsnuc.out")
         params:
             evalue = config['contamination_evalue']
         threads: config['threads']
@@ -109,7 +117,7 @@ if 'contaminants' in config and config['contaminants'] not in [None, ""]:
             contigs = config['transcriptome'] if 'transcriptome' in config  and config['transcriptome'] is not None else rules.assemble_transcriptome.output.assembly,
             blast_result = rules.blast_on_contaminants.output.blast_result,    
         output:
-            filtered_contigs = config['basename'] + ".filtered.fasta"
+            filtered_contigs = global_output(config['basename'] + ".filtered.fasta")
         run:
             from Bio import SeqIO
             records = []
@@ -132,7 +140,7 @@ rule detect_orfs:
     input:
         nucleotide_sequences = rules.filter_contaminants.output.filtered_contigs if config['contaminants'] not in [None, ""] else config['transcriptome'] if 'transcriptome' in config  and config['transcriptome'] != None else rules.assemble_transcriptome.output.assembly
     output:
-        aa_sequences = config['basename'] + ".faa"
+        aa_sequences = global_output(config['basename'] + ".faa")
     params:
         minlen = "99" if "minlen" not in config else config['minlen'],
         maxlen = "30000000" if "maxlen" not in config else config['maxlen']
@@ -146,7 +154,7 @@ rule drop_X:
     input:
         aa_sequences = rules.detect_orfs.output.aa_sequences
     output:
-        drop_sequence = config['basename'] + "_noX.faa"
+        drop_sequence = global_output(config['basename'] + "_noX.faa")
     run:
         from Bio import SeqIO
         with open(f"{output}", "w") as outfile:
@@ -159,7 +167,7 @@ rule cluster_peptides:
     input:
         aa_sequences = rules.drop_X.output.drop_sequence
     output:
-        filtered_aa_sequences = config['basename'] + ".clustered.faa"
+        filtered_aa_sequences = global_output(config['basename'] + ".clustered.faa")
     params:
         threshold = config['clustering_threshold'], #todo : we might want to use separate thresholds if we're going to run cd-hit on transcripts and peptides
         memory = str(int(config['memory'])*1000),
@@ -175,7 +183,7 @@ rule trim_peptides:
     input:
         aa_sequences = rules.cluster_peptides.output.filtered_aa_sequences
     output:
-        trimmed_sequences = config['basename'] + ".trimmed.faa",
+        trimmed_sequences = global_output(config['basename'] + ".trimmed.faa"),
     threads: 
         config['threads']
     run:
@@ -190,25 +198,25 @@ checkpoint split_fasta:
     input:
         fasta_file = rules.trim_peptides.output.trimmed_sequences
     output:
-        split_dir = directory("split_files")
+        split_dir = directory(global_output("split_files"))
     params:
-        chunk_size = 5000 # using 9000 instead of 50000 for usability in normal desktop/laptop pcs. May be user defined.
+        chunk_size = 5000
     threads:
         config['threads']
     shell:
         """
-        mkdir -p split_files && seqkit split2 -s {params.chunk_size} -O {output} --by-size-prefix ""  -j {threads} {input.fasta_file}
+        mkdir -p {output.split_dir}
+        seqkit split2 -s {params.chunk_size} -O {output.split_dir} --by-size-prefix ""  -j {threads} {input.fasta_file}
         """
-
 
 
 rule run_signalp:
     input: 
-        fasta_file = "split_files/{i}.faa",
+        fasta_file = global_output("")+"split_files/{i}.faa",
     output:
-        outfile = "split_files/{i}_summary.signalp5"
+        outfile = global_output("split_files/{i}_summary.signalp5")
     params:
-        prefix = "split_files/{i}"
+        prefix = global_output("split_files/{i}")
     shell:
         """
         signalp -batch 5000 -fasta {input.fasta_file} -org euk -format short -verbose -prefix {params.prefix}
@@ -217,7 +225,7 @@ rule run_signalp:
 
 def aggregate_splits(wildcards):
     checkpoint_output = checkpoints.split_fasta.get(**wildcards).output[0]
-    return expand("split_files/{i}_summary.signalp5",
+    return expand(global_output("")+"split_files/{i}_summary.signalp5",
         i=glob_wildcards(os.path.join(checkpoint_output, "{i}.faa")).i)
 
 
@@ -226,7 +234,7 @@ rule filter_signalp_outputs:
     input:
         files = aggregate_splits
     output:
-        config["basename"] + "_filtered_sigp.tsv"
+        global_output(config["basename"] + "_filtered_sigp.tsv")
     params:
         threshold = config['signalp_dvalue'] if 'signalp_dvalue' in config else "0.7"
     shell:
@@ -239,8 +247,8 @@ rule extract_secreted_peptides:
         signalp_result = rules.filter_signalp_outputs.output,
         fasta_file = rules.cluster_peptides.output.filtered_aa_sequences
     output:
-        secreted_peptides = config['basename'] + "_secreted_peptides.fasta",
-        non_secreted_peptides = config['basename'] + "_non_secreted_peptides.fasta"
+        secreted_peptides = global_output(config['basename'] + "_secreted_peptides.fasta"),
+        non_secreted_peptides = global_output(config['basename'] + "_non_secreted_peptides.fasta")
     run:
         from Bio import SeqIO
         with open(str(input.signalp_result)) as infile:
@@ -262,7 +270,7 @@ rule run_phobius: #todo: remember to inform the user about the installation proc
     input: 
         rules.extract_secreted_peptides.output.secreted_peptides
     output:
-        table = config['basename'] + "_phobius_predictions.tsv"
+        table = global_output(config['basename'] + "_phobius_predictions.tsv")
     shell:
         """
         phobius.pl -short {input} | sed 's/\s\+/\t/g' | awk '$2 == 0' > {output.table}
@@ -274,7 +282,7 @@ rule extract_non_TM_peptides:
         phobius_result = rules.run_phobius.output.table,
         fasta_file = rules.extract_secreted_peptides.output.secreted_peptides
     output:
-        non_TM_peptides = config['basename'] + "non_TM_peptides.fasta"
+        non_TM_peptides = global_output(config['basename'] + "non_TM_peptides.fasta")
     run:
         from Bio import SeqIO
         with open(str(input.phobius_result)) as infile:
@@ -292,7 +300,7 @@ rule build_toxin_blast_db: #todo: do we switch to diamond for max speed?
     input:
         db = config['toxin_db']
     output:
-        outfile = config['toxin_db'] + ".dmnd",
+        outfile = global_output(config['toxin_db'].split("/")[-1] + ".dmnd"),
     shell:
         """
         diamond makedb --db {output.outfile} --in {input.db} 
@@ -304,7 +312,7 @@ rule blast_on_toxins:
         orf_fasta_clustered_file = rules.cluster_peptides.output.filtered_aa_sequences,
         db_file = rules.build_toxin_blast_db.output.outfile,
     output:
-        blast_result = config['basename'] + "_toxin_blast_results.tsv",
+        blast_result = global_output(config['basename'] + "_toxin_blast_results.tsv"),
     params:
         evalue = config['toxins_evalue'] if 'toxins_evalue' in config else "1e-10"
     threads: 
@@ -323,7 +331,7 @@ rule retrieve_orfs_with_blast_without_signalp:
         nonsec_fasta_file = rules.extract_secreted_peptides.output.non_secreted_peptides,
         blast_toxins_result = rules.blast_on_toxins.output.blast_result
     output:
-        hits_fasta = config['basename'] + '_toxins_by_similarity.fasta'
+        hits_fasta = global_output(config['basename'] + '_toxins_by_similarity.fasta')
     run:
         with open(str(input.blast_toxins_result)) as infile:
             records = []
@@ -341,19 +349,22 @@ rule retrieve_candidate_toxins:
         structure_based = rules.extract_non_TM_peptides.output.non_TM_peptides,
         similarity_based = rules.retrieve_orfs_with_blast_without_signalp.output.hits_fasta
     output:
-        config["basename"] + "_candidate_toxins.fasta"
+        global_output(config["basename"] + "_candidate_toxins.fasta")
     shell:
         """
         cat {input.structure_based} {input.similarity_based} > {output}
         """
 
+
 rule download_pfam:
-#   Description: downloads pfam database. I'd like to leave it this way as the database is fairly small and will be downloaded in parallel with slow steps. 
     output:
-        pfam_db = "Pfam-A.hmm"
+        db_dir = directory(global_output("databases/pfam")),
+        pfam_db = global_output("databases/pfam/Pfam-A.hmm")
     shell:
         """
-        wget -c https://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/Pfam-A.hmm.gz && gunzip Pfam-A.hmm.gz
+        mkdir -p {output.db_dir}
+        wget -c https://ftp.ebi.ac.uk/pub/databases/Pfam/current_release/Pfam-A.hmm.gz -P {output.db_dir}
+        gunzip -c {output.db_dir}/Pfam-A.hmm.gz > {output.pfam_db}
         """
 
 rule run_hmmer:
@@ -362,8 +373,8 @@ rule run_hmmer:
         fasta_file = rules.retrieve_candidate_toxins.output,
         pfam_db = lambda wildcards: config["pfam_db_path"] if "pfam_db_path" in config and config["pfam_db_path"] not in [None, ""] else rules.download_pfam.output.pfam_db,
     output:
-        tblout = config['basename'] + ".tblout",
-        domtblout = config['basename'] + ".domtblout"
+        tblout = global_output(config['basename'] + ".tblout"),
+        domtblout = global_output(config['basename'] + ".domtblout")
     params:
         evalue = config['pfam_evalue'] if 'pfam_evalue' in config else "1e-5"
     threads: 
@@ -378,7 +389,7 @@ rule parse_hmmsearch_output:
     input: 
         domtblout = rules.run_hmmer.output.domtblout
     output:
-        filtered_table = config['basename'] + ".domtblout.tsv"
+        filtered_table = global_output(config['basename'] + ".domtblout.tsv")
     run:
         import pandas
         df_domtblout = pandas.read_csv(f"{input.domtblout}", comment="#", delim_whitespace=True, usecols = [0,1,2,3,4] , names=["target name","accession_t","tlen","query name","accession_Q"])
@@ -391,7 +402,7 @@ rule run_wolfpsort:
     input:
         rules.retrieve_candidate_toxins.output
     output:
-        config['basename'] + "_secreted_wolfpsort_prediction.tsv"
+        global_output(config['basename'] + "_secreted_wolfpsort_prediction.tsv")
     params:
         wps_path = config['wolfPsort_path'],
         awk = "awk '{print $1\"\t\"$2}'"
@@ -405,7 +416,7 @@ rule detect_repeated_aa:
     input:
         fasta_file = rules.retrieve_candidate_toxins.output,
     output:
-        repeated_aa = config['basename'] + "_repeated_aa.tsv"
+        repeated_aa = global_output(config['basename'] + "_repeated_aa.tsv")
     params:
         threshold = config['repeated_aa_threshold'] if 'repeated_aa_threshold' in config else 5
     run:
@@ -465,14 +476,15 @@ if config['quant'] == True:
                     r1 = rules.trim_reads.output.r1,
                     r2 = rules.trim_reads.output.r2
                 output:
-                    quant_dir = directory(config['basename'] + "_quant"),
-                    quantification = config['basename'] + "_quant/quant.sf"
+                    quant_dir = directory(global_output(config['basename'] + "_quant")),
+                    index= directory(global_output("salmon.idx")),
+                    quantification = global_output(config['basename'] + "_quant/quant.sf")
                 threads:
                     config['threads']
                 shell:
                     """
-                    salmon index -t {input.transcriptome} -i salmon.idx -p {threads}
-                    salmon quant -i salmon.idx -l A -1 {input.r1} -2 {input.r2} --validateMappings -o {output.quant_dir}
+                    salmon index -t {input.transcriptome} -i {output.index} -p {threads}
+                    salmon quant -i {output.index} -l A -1 {input.r1} -2 {input.r2} --validateMappings -o {output.quant_dir}
                     """
         else:
             rule run_salmon:
@@ -480,34 +492,35 @@ if config['quant'] == True:
                     transcriptome = lambda wildcards: config['transcriptome'] if 'transcriptome' in config and config['transcriptome'] not in [None, ""] else rules.assemble_transcriptome.output.assembly,
                     r1 = rules.trim_reads.output.r1
                 output:
-                    quant_dir = directory(config['basename'] + "_quant"),
-                    quantification = config['basename'] + "_quant/quant.sf"
+                    quant_dir = directory(global_output(config['basename'] + "_quant")),
+                    index= directory(global_output("salmon.idx")),
+                    quantification = global_output(config['basename'] + "_quant/quant.sf")
                 threads:
                     config['threads']
                 shell:
                     """
-                    salmon index -t {input.transcriptome} -i salmon.idx -p {threads}
-                    salmon quant -i salmon.idx -l A -r {input.r1} --validateMappings -o {output.quant_dir}
+                    salmon index -t {input.transcriptome} -i {output.index} -p {threads}
+                    salmon quant -i {output.index} -l A -r {input.r1} --validateMappings -o {output.quant_dir}
                     """
 
 
-
 rule download_uniprot:
-#   Description: downloads the uniprot fasta
     output:
-        db_dir = directory("databases"),
-        database = "databases/uniprot.fasta.gz"
+        db_dir = directory(global_output("databases/uniprot")),
+        database = global_output("databases/uniprot/uniprot_sprot.fasta.gz")
     shell:
         """
-        curl https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz -o {output.database}
+        mkdir -p {output.db_dir}
+        wget -c https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz -P {output.db_dir}
         """
+
 
 rule make_uniprot_blast_database:
 #   Description: builds a blast database from the uniprot fasta
     input:
         fasta_file = lambda wildcards: config["swissprot_db_path"] if "swissprot_db_path" in config and config["swissprot_db_path"] not in [None, ""] else rules.download_uniprot.output.database
     output:
-        db_file = "databases/uniprot_blast_db.dmnd"
+        db_file = global_output("uniprot_blast_db.dmnd")
     shell:
         """
         diamond makedb --in {input.fasta_file} --db {output.db_file}
@@ -519,7 +532,7 @@ rule blast_on_uniprot:
         fasta_file = rules.retrieve_candidate_toxins.output,
         db_file = rules.make_uniprot_blast_database.output.db_file
     output:
-        blast_result = config['basename'] + "_uniprot_blast_results.tsv"
+        blast_result = global_output(config['basename'] + "_uniprot_blast_results.tsv")
     params:
         evalue = config['swissprot_evalue'] if 'swissprot_evalue' in config else "1e-10",
     threads: 
@@ -547,7 +560,6 @@ outputs = [
 ]
 
 
-
 rule build_output_table:
 #   Description: this rule merges the tabular output of the other rules and merges it in a single table. It uses the outputs list defined above.
     input:
@@ -557,7 +569,7 @@ rule build_output_table:
         quant = rules.run_salmon.output.quantification if config['quant'] else [],
         extra = outputs
     output:
-        config['basename'] + "_toxins.tsv"
+        global_output(config['basename'] + "_toxins.tsv")
     params:
         TPMthreshold = config['TPMthreshold'] if 'TPMthreshold' in config else 1000,
     run:
@@ -585,6 +597,7 @@ rule build_output_table:
             newcols[0] = "contig"
             q.columns = newcols
             df = df.merge(q, how = "left", on = "contig")
+            df = df.drop(['EffectiveLength','NumReads'], axis=1)
         try:
             df = df.assign(Rating='')
             df['Rating'] = df.apply(lambda row: str(row['Rating'] + 'S') if pandas.notna(row['signalp_prediction']) else str(row['Rating'] + '*'), axis=1)
@@ -601,6 +614,8 @@ rule build_output_table:
             print(f"An error has occurred during sequence rating: {e}")
             sys.exit()  
         #df = df[df['mature_peptide'].apply(lambda x: len(str(x))) > 3]
+        df = df.drop(['cut_site_position','query name'], axis=1)
+        df.rename(columns={'k': 'wolfpsort_prediction'}, inplace=True)
         df.drop_duplicates().to_csv(f"{output}", sep='\t', index=False)
 
 rule all:
