@@ -88,6 +88,7 @@ snakemake --snakefile /path/to/snakefile -r all -j 8 --configfile config.yaml
 To use this project, you need to fill the `config.yaml` file with the following parameters:
 
 - `transcriptome`: the path to the transcriptome file in FASTA format. If this parameter is not provided, the assembly will be performed using the `R1` and `R2` parameters.
+- `output_dir`: absolute path of the directory used for output files. If no path is provided the files will be created in the current directory.
 - `basename`: the basename for the output files.
 - `memory`: the memory in GB to use for the assembly.
 - `threads`: the number of logic threads, not physical cores, to use for the assembly. For clarity, this parameter should be equal to or less than the number of cores available on your machine.
