@@ -89,9 +89,10 @@ if 'contaminants' in config and config['contaminants'] not in [None, ""]:
         input:
             fasta_db = config['contaminants']
         output:
-            blast_db = global_output(config['contaminants'].split("/")[-1] + ".nin")
+            blast_db = global_output(config['contaminants'].split("/")[-1]+".out")
         shell:
             """
+            touch {output.blast_db}
             makeblastdb -dbtype nucl -in {input.fasta_db} -out {output.blast_db}
             """
 
@@ -99,8 +100,7 @@ if 'contaminants' in config and config['contaminants'] not in [None, ""]:
     #   Description: performs the actual blast of the contigs against the contaminants database
         input:
             blast_db = rules.build_contaminants_database.output.blast_db,
-            blast_db_alias =  config['contaminants'],
-            contigs = config['transcriptome'] if 'transcriptome' in config and config['transcriptome'] is not None else rules.assemble_transcriptome.output.assembly,
+            contigs = lambda wildcards: config['transcriptome'] if 'transcriptome' in config and config['transcriptome'] not in [None, ""] else rules.assemble_transcriptome.output.assembly,
         output:
             blast_result = global_output(config['basename'] + ".blastsnuc.out")
         params:
@@ -108,13 +108,13 @@ if 'contaminants' in config and config['contaminants'] not in [None, ""]:
         threads: config['threads']
         shell:
             """
-            blastn -db {input.blast_db_alias} -query {input.contigs} -out {output.blast_result} -outfmt 6 -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads}
+            blastn -db {input.blast_db} -query {input.contigs} -out {output.blast_result} -outfmt 6 -evalue {params.evalue} -max_target_seqs 1 -num_threads {threads}
             """
 
     rule filter_contaminants:
     #   Description: performs the actual filtering
         input: 
-            contigs = config['transcriptome'] if 'transcriptome' in config  and config['transcriptome'] is not None else rules.assemble_transcriptome.output.assembly,
+            contigs = lambda wildcards: config['transcriptome'] if 'transcriptome' in config and config['transcriptome'] not in [None, ""] else rules.assemble_transcriptome.output.assembly,
             blast_result = rules.blast_on_contaminants.output.blast_result,    
         output:
             filtered_contigs = global_output(config['basename'] + ".filtered.fasta")
