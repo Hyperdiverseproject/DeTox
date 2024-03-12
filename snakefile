@@ -217,9 +217,10 @@ rule run_signalp:
         outfile = global_output("split_files/{i}_summary.signalp5")
     params:
         prefix = global_output("split_files/{i}")
+        signalp_path = config['signalp_path']
     shell:
         """
-        signalp -batch 5000 -fasta {input.fasta_file} -org euk -format short -verbose -prefix {params.prefix}
+        {params.signalp_path} -batch 5000 -fasta {input.fasta_file} -org euk -format short -verbose -prefix {params.prefix}
         """
 
 
