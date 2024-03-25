@@ -113,3 +113,8 @@ To use this project, you need to fill the `config.yaml` file with the following 
 - `swissprot_evalue`: the e-value threshold for SwissProt annotation using BLAST.
 - `cys_pattern`: a boolean option to perform cysteine pattern analysis.
 
+## Citation
+
+If you use DeTox in your research, please cite our article:
+
+Allan Ringeval, Sarah Farhat, Alexander Fedosov, Marco Gerdol, Samuele Greco, Lou Mary, Maria Vittoria Modica, Nicolas Puillandre, DeTox: a pipeline for the detection of toxins in venomous organisms, Briefings in Bioinformatics, Volume 25, Issue 2, March 2024, bbae094, https://doi.org/10.1093/bib/bbae094
