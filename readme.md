@@ -104,7 +104,7 @@ To use this project, you need to fill the `config.yaml` file with the following 
 - `clustering_threshold`: the clustering threshold for CD-HIT.
 - `maxlen`: the maximum length of transcripts to keep.
 - `signalp_dvalue`: the D-value threshold for SignalP.
-- `signalp_path`: the path to the SignalP executable.
+- `signalp_path`: the path to the SignalP executable. !! (generates errors, it has been disabled in the code. It is preferable to install it globally in .bashrc so that it can be accessed directly with "signalp".)
 - `wolfPsort_path`: the path to the WoLF PSORT executable (WoLFPSort/bin/runWolfPsortSummary). This parameter is required if `wolfpsort` is set to `True`.
 - `quant`: a boolean option to perform transcript quantification using Salmon. If set to `True`, the `R1` and `R2` parameters are required.
 - `TPMthreshold`: The TPM threshold for a sequence to be flagged "T".
