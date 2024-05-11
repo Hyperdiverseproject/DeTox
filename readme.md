@@ -8,20 +8,54 @@
   ```bash
   git clone <repository_url>
   ```
+---
 
 ### 2. Create and Activate Conda Environment
 
 #### 2.1 Installation of Conda
 
-- Before you begin, make sure you have a recent version of Python installed on your system. Conda is typically distributed with the Anaconda or Miniconda distribution.
+- Before you begin, make sure you have a recent version of Python installed on your system. Conda is typically distributed with the Anaconda, Miniconda, Miniforge distribution.
 
-1. **Download the Anaconda Distribution:**
+##### 2.1.1 Miniforge Distribution (recommended)
+
+  1. **Download Miniforge Distribution**
+    - Visit the official Miniforge repository at [https://github.com/conda-forge/miniforge]
+    - Select the appropriate version for your operating system (Windows, macOS, Linux) and download the installation file.
+
+  2. **Install Miniforge:**
+   - Follow the installation instructions provided on the official Miniforge repository.
+   - After installation, you should have Conda installed on your system.
+
+##### 2.1.2 Anaconda/Miniconda Distribution (not recommended):
+
+1. **Download the Anaconda/Miniconda Distribution:**
    - Visit the official Anaconda website at [https://docs.conda.io/projects/conda/en/latest/user-guide/install/).
    - Select the appropriate version for your operating system (Windows, macOS, Linux) and download the installation file.
 
-2. **Install Anaconda or Miniconda:**
-   - Follow the installation instructions provided on the official Conda page.
+2. **Install Anaconda/Miniconda:**
+   - Follow the installation instructions provided on the official Anaconda page.
    - After installation, you should have Conda installed on your system.
+
+##### 2.1.3 Verify the installation:
+  - Open a terminal or command prompt and type ```conda --version``` to verify that Conda has been installed correctly.
+  - You can check the installation of the distribution using the command:
+   ```
+    $ conda env list
+    # conda environments:
+    #
+                                 /home/(user name)/anaconda3
+                                 /home/(user name)/miniconda3
+    base                  *      /home/(user name)/miniforge3
+  ```
+  - Only the distributions you have installed will be displayed
+
+##### 2.1.4 Select distribution
+
+  - All the following steps, such as creating the detox environment, should be carried out by first selecting the distribution that has been installed.
+  - To select the Miniforge distribution, for example, if this is the one that has been installed, you need to run the command:
+  ```
+   conda activate /home/(user name)/miniforge3
+  ```
 
 #### 2.2 Installation of Mamba
 
@@ -47,6 +81,7 @@ Mamba is an alternative to Conda that offers improved performance for environmen
   ```bash
   mamba env create -f toxo_env.yml && mamba activate DeToX
   ```
+---
 
 ### 3. Install Licensed Software
 
