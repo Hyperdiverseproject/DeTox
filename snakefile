@@ -1,6 +1,28 @@
 from Bio import SeqIO
 import pandas 
 import glob
+import os, re
+
+has_reads         = config.get("R1")             not in [None, ""]
+has_transcripts   = config.get("transcriptome") not in [None, ""]
+has_proteome      = config.get("proteome_fasta") not in [None, ""]
+quant = config.get("quant", True)
+
+# --- 1. Proteome OR 2. Reads (+/- transcriptome)  -----------------------------
+if has_proteome and (has_reads or has_transcripts):
+    raise ValueError("Choose between providing only a proteome or a transcriptome/read")
+if not (has_reads or has_transcripts or has_proteome):
+    raise ValueError("No entry point provided in config.yaml. Please provide either a proteome, a transcriptome or reads.")
+
+if has_proteome:
+    if quant:
+        raise ValueError(
+            "quant must be false in config.yaml if you provide proteome_fasta."
+        )
+    if config.get("R1") not in [None, ""] or config.get("R2") not in [None, ""]:
+        raise ValueError(
+            "You do not need to fill in R1/R2 in config.yaml when proteome_fasta is used."
+        )
 
 def get_signalp_splits(wildcards):
     import os
@@ -17,12 +39,16 @@ def fastaToDataframe(fastaPath):
 
 
 def global_output(path):
-    """ Construit le chemin d'output complet """
-    output_dir = config.get("output_dir", "")
-    if output_dir:
-        return f"{output_dir}/{path}"
-    else:
-        return path
+    # supprime d’entrée les blancs parasite
+    output_dir = config.get("output_dir", "").strip()
+    path = path.strip()
+
+    # option de sécurité : signale si tu en laisses passer
+    for s in (output_dir, path):
+        if re.search(r"^\s|\s$", s):
+            raise ValueError(f"Chemin malformé : «{s}» contient des blancs en bordure")
+
+    return os.path.join(output_dir, path) if output_dir else path
 
 #configfile: "config.yaml"
 
@@ -34,7 +60,6 @@ if config['R1'] not in [None, ""]:
             input:
                 r1 = config['R1'],
                 r2 = config['R2'],
-                adapters = config['adapters'],
             output:
                 r1 = global_output("trimmed_reads/" + config['R1'].split("/")[-1]),
                 r1_unpaired = global_output("trimmed_reads/unpaired." + config['R1'].split("/")[-1]),
@@ -44,7 +69,7 @@ if config['R1'] not in [None, ""]:
             shell:
                 """
                 mkdir -p trimmed_reads
-                trimmomatic PE -threads {threads} {input.r1} {input.r2} {output.r1} {output.r1_unpaired} {output.r2} {output.r2_unpaired} ILLUMINACLIP:{input.adapters}:2:40:15 LEADING:15 TRAILING:15 MINLEN:25 SLIDINGWINDOW:4:15
+                fastp -i {input.r1} -I {input.r2} -o {output.r1} -O {output.r2} --unpaired1 {output.r1_unpaired} --unpaired2 {output.r2_unpaired} -w {threads} --detect_adapter_for_pe --cut_front --cut_front_window_size 1 --cut_tail --cut_tail_window_size 1 --cut_right --cut_right_window_size 4 --cut_mean_quality 15 --length_required 25 -h fastp.html -j fastp.json
                 """
     else:
         # Reads single-end
@@ -52,17 +77,16 @@ if config['R1'] not in [None, ""]:
             # Description: trims the provided raw single-end reads
             input:
                 r1 = config['R1'],
-                adapters = config['adapters'],
             output:
                 r1 = global_output("trimmed_reads/" + config['R1'].split("/")[-1]),
             threads: config['threads']
             shell:
                 """
                 mkdir -p trimmed_reads
-                trimmomatic SE -threads {threads} {input.r1} {output.r1} ILLUMINACLIP:{input.adapters}:2:40:15 LEADING:15 TRAILING:15 MINLEN:25 SLIDINGWINDOW:4:15
+                fastp -i {input.r1} -o {output.r1} -w {threads} --adapter_sequence --cut_front --cut_front_window_size 1 --cut_tail --cut_tail_window_size 1 --cut_right --cut_right_window_size 4 --cut_mean_quality 15 --length_required 25 -h fastp.html -j fastp.json
                 """
 
-if config['transcriptome'] in [None, ""]:
+if config['transcriptome'] in [None, ""] and config['proteome_fasta'] in [None, ""]:
     rule assemble_transcriptome:
         # Description: Assembles a transcriptome if it is not provided. Uses Trinity 
         # In this case sequencing reads MUST be provided in the config.
@@ -134,31 +158,32 @@ if 'contaminants' in config and config['contaminants'] not in [None, ""]:
                     if rec.id not in records:
                         SeqIO.write(rec, handle, "fasta")
 
-rule detect_orfs:
-#   Description: finds complete orfs within the input nucleotide sequences. 
-#   i'm testing this with orfipy instead of orffinder to leverage multithreading
-    input:
-        nucleotide_sequences = rules.filter_contaminants.output.filtered_contigs if config['contaminants'] not in [None, ""] else config['transcriptome'] if 'transcriptome' in config  and config['transcriptome'] != None else rules.assemble_transcriptome.output.assembly
-    output:
-        aa_sequences = global_output(config['basename'] + ".faa")
-    params:
-        minlen = "99" if "minlen" not in config else config['minlen'],
-        maxlen = "30000000" if "maxlen" not in config else config['maxlen']
-    threads: config['threads']
-    shell:
-        """
-        orfipy --procs {threads} --start ATG --partial-3 --partial-5 --pep {output.aa_sequences} --min {params.minlen} --max {params.maxlen} {input.nucleotide_sequences} --outdir .
-        """
+if config['proteome_fasta'] in [None, ""]:
+    rule detect_orfs:
+    #   Description: finds complete orfs within the input nucleotide sequences. 
+    #   i'm testing this with orfipy instead of orffinder to leverage multithreading
+        input:
+            nucleotide_sequences = rules.filter_contaminants.output.filtered_contigs if config['contaminants'] not in [None, ""] else config['transcriptome'] if 'transcriptome' in config  and config['transcriptome'] != None else rules.assemble_transcriptome.output.assembly
+        output:
+            aa_sequences = global_output(config['basename'] + ".faa")
+        params:
+            minlen = "99" if "minlen" not in config else config['minlen'],
+            maxlen = "30000000" if "maxlen" not in config else config['maxlen']
+        threads: config['threads']
+        shell:
+            """
+            orfipy --procs {threads} --start ATG --partial-3 --partial-5 --pep {output.aa_sequences} --min {params.minlen} --max {params.maxlen} {input.nucleotide_sequences} --outdir .
+            """
 
 rule drop_X:
     input:
-        aa_sequences = rules.detect_orfs.output.aa_sequences
+        aa_sequences = config['proteome_fasta'] if config['proteome_fasta'] not in [None, ""] else rules.detect_orfs.output.aa_sequences
     output:
         drop_sequence = global_output(config['basename'] + "_noX.faa")
     run:
         from Bio import SeqIO
-        with open(f"{output}", "w") as outfile:
-            for seq in SeqIO.parse(f"{input}", "fasta"):
+        with open(output.drop_sequence, "w") as outfile:
+            for seq in SeqIO.parse(input.aa_sequences, "fasta"):
                 if "X" not in seq.seq:
                     SeqIO.write(seq, outfile, "fasta")
 
@@ -188,10 +213,14 @@ rule trim_peptides:
         config['threads']
     run:
         from Bio import SeqIO
-        import subprocess
-        with open(output.trimmed_sequences, "w") as outfile:
-            for seq in SeqIO.parse(input.aa_sequences, "fasta"):
-                outfile.write(f">{seq.id}\n{seq.seq[:50]}\n")
+
+        def trim_records():
+            for record in SeqIO.parse(input.aa_sequences, "fasta"):
+                # On renvoie un nouvel enregistrement contenant seulement les 50 premiers acides aminés
+                yield record[:50]
+
+        # SeqIO.write s'occupe de tout le formatage proprement
+        SeqIO.write(trim_records(), output.trimmed_sequences, "fasta")
 
 
 checkpoint split_fasta:
@@ -217,7 +246,6 @@ rule run_signalp:
         outfile = global_output("split_files/{i}_summary.signalp5")
     params:
         prefix = global_output("split_files/{i}"),
-        signalp_path = config['signalp_path']
     shell:
         """
         signalp -batch 5000 -fasta {input.fasta_file} -org euk -format short -verbose -prefix {params.prefix}
@@ -240,7 +268,7 @@ rule filter_signalp_outputs:
         threshold = config['signalp_dvalue'] if 'signalp_dvalue' in config else "0.7"
     shell:
         """
-        awk -v b={params.threshold} -F'\t' '!/^#/ && !/\?/  && $3 > b' {input.files} > {output}
+        awk -v b={params.threshold} -F'\t' '!/^#/ && !/\\?/  && $3 > b' {input.files} > {output}
         """
 
 rule extract_secreted_peptides:
@@ -274,7 +302,7 @@ rule run_phobius: #todo: remember to inform the user about the installation proc
         table = global_output(config['basename'] + "_phobius_predictions.tsv")
     shell:
         """
-        phobius.pl -short {input} | sed 's/\s\+/\t/g' | awk '$2 == 0' > {output.table}
+        phobius.pl -short {input} | sed 's/\\s\\+/\\t/g' | awk '$2 == 0' > {output.table}
         """
 
 rule extract_non_TM_peptides:
@@ -301,7 +329,9 @@ rule build_toxin_blast_db: #todo: do we switch to diamond for max speed?
     input:
         db = config['toxin_db']
     output:
-        outfile = global_output(config['toxin_db'].split("/")[-1] + ".dmnd"),
+        outfile = global_output(config['toxin_db'].split("/")[-1] + ".dmnd")
+    log:
+        global_output("logs/build_toxin_blast_db.log")
     shell:
         """
         diamond makedb --db {output.outfile} --in {input.db} 
@@ -393,10 +423,10 @@ rule parse_hmmsearch_output:
         filtered_table = global_output(config['basename'] + ".domtblout.tsv")
     run:
         import pandas
-        df_domtblout = pandas.read_csv(f"{input.domtblout}", comment="#", delim_whitespace=True, usecols = [0,1,2,3,4] , names=["target name","accession_t","tlen","query name","accession_Q"])
+        df_domtblout = pandas.read_csv(str(input.domtblout), comment="#", delim_whitespace=True, usecols = [0,1,2,3,4] , names=["target name","accession_t","tlen","query name","accession_Q"])
         aggregated_domains = df_domtblout.groupby('target name')['query name'].apply(list).reset_index()
         aggregated_domains['pfam domains'] = aggregated_domains['query name'].apply(lambda x: "; ".join(list(set(x))))
-        aggregated_domains.to_csv(f"{output.filtered_table}", sep="\t", index=False)
+        aggregated_domains.to_csv(str(output.filtered_table), sep="\t", index=False)
 
 rule run_wolfpsort:
 #   Description: runs wolfpsort on secreted peptides inferred by signalp 
@@ -434,7 +464,7 @@ rule detect_repeated_aa:
                     if int(nbRep) >=int(f"{params.threshold}"):
                         repetition.append((elem,nbRep))
             return repetition
-        secreted = fastaToDataframe(f"{input.fasta_file}")
+        secreted = fastaToDataframe(str(input.fasta_file))
         secreted["Repeats1"] = secreted.apply(lambda x: findRepetition(1,x["Sequence"]),axis=1)
         secreted["Repeats2"] = secreted.apply(lambda x: findRepetition(2,x["Sequence"]),axis=1)
         secreted["Repeats3"] = secreted.apply(lambda x: findRepetition(3,x["Sequence"]),axis=1)
@@ -444,7 +474,7 @@ rule detect_repeated_aa:
         secreted['RepeatsLengths'] = [','.join(map(str, l)) for l in secreted['RepeatsLengths']]
         secreted['RepeatsTypes'] = [','.join(map(str, l)) for l in secreted['RepeatsTypes']]
         secreted = secreted.drop(columns=["Repeats","Repeats1","Repeats2","Repeats3"])
-        secreted.to_csv(f"{output.repeated_aa}", index=False,sep='\t')
+        secreted.to_csv(output.repeated_aa, index=False,sep='\t')
 
 def get_cys_pattern(seq):
     pattern = ""
@@ -574,8 +604,8 @@ rule build_output_table:
     params:
         TPMthreshold = config['TPMthreshold'] if 'TPMthreshold' in config else 1000,
     run:
-        seq_df = fastaToDataframe(f"{input.fasta_file}")
-        signalp_df = pandas.read_csv(f"{input.signalp_result}", sep='\t', names = ["ID", "signalp_prediction", "prob_signal", "prob_nosignal", "cutsite"])
+        seq_df = fastaToDataframe(str(input.fasta_file))
+        signalp_df = pandas.read_csv(str(input.signalp_result), sep='\t', names = ["ID", "signalp_prediction", "prob_signal", "prob_nosignal", "cutsite"])
         df = seq_df.merge(signalp_df, on = "ID", how = "left")
         #df = pandas.read_csv(f"{input.base}", sep='\t')
         for i in input.extra:
@@ -593,7 +623,7 @@ rule build_output_table:
             df['Cys_pattern'] = df['mature_peptide'].apply(lambda x: get_cys_pattern(x) if pandas.notna(x) else None)
         if config['quant'] == True:
             df['contig'] = df['ID'].apply(lambda x: x.split("_ORF")[0])
-            q = pandas.read_csv(f"{input.quant}", sep = "\t")
+            q = pandas.read_csv(str(input.quant), sep = "\t")
             newcols = [i for i in q.columns]
             newcols[0] = "contig"
             q.columns = newcols
@@ -617,7 +647,7 @@ rule build_output_table:
         #df = df[df['mature_peptide'].apply(lambda x: len(str(x))) > 3]
         df = df.drop(['cut_site_position','query name'], axis=1)
         df.rename(columns={'k': 'wolfpsort_prediction'}, inplace=True)
-        df.drop_duplicates().to_csv(f"{output}", sep='\t', index=False)
+        df.drop_duplicates().to_csv(str(output), sep='\t', index=False)
 
 rule all:
     input: 
