@@ -129,8 +129,8 @@ To use this project, you need to fill the `config.yaml` file with the following 
 - `threads`: the number of logic threads, not physical cores, to use for the assembly. For clarity, this parameter should be equal to or less than the number of cores available on your machine.
 - `R1`: the path to the forward paired-end or single-end reads file in FASTQ format. This parameter is required if `transcriptome` is not provided.
 - `R2`: the path to the reverse paired-end reads file in FASTQ format. This parameter is required if `transcriptome` is not provided and data are paired-end.
-- `adapters`: the path to the adapters file in FASTA format. This parameter is required if `transcriptome` is not provided are paired end.
 - `contaminants`: the path to the contaminants file in FASTA format. This parameter is mandatory.
+- `proteome_fasta`: the path to the proteome FASTA file for functional annotation and quantification (optional). If this parameter is provided, `transcriptome`, `R1`, and `R2` must be left empty and `quant` must be set to `false`.
 - `toxin_db`: the path to the toxin database file in FASTA format. This parameter is mandatory.
 - `pfam_db_path`: the path to the Pfam database file in .hmm format. If no path is provided, the database is downloaded automatically.
 - `swissprot_db_path`: the path to the SwissProt database file in fasta.gz format. If no path is provided, the database is downloaded automatically.
